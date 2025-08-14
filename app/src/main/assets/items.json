@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "id": "royal_goblet",
+      "name": "Royal Goblet",
+      "icon": "ic_goblet",
+      "type": "EQUIPMENT",
+      "slot": "OFFHAND",
+      "rarity": "EPIC",
+      "stats": { "attack": 0, "defense": 2, "speed": 0.1, "health": 5, "critChance": 0.02, "critMultiplier": 1.5 }
+    },
+    {
+      "id": "steel_sword",
+      "name": "Steel Sword",
+      "icon": "ic_sword",
+      "type": "EQUIPMENT",
+      "slot": "WEAPON",
+      "rarity": "RARE",
+      "stats": { "attack": 8, "defense": 0, "speed": 0.0, "health": 0, "critChance": 0.05, "critMultiplier": 1.8 }
+    },
+    {
+      "id": "apple",
+      "name": "Apple",
+      "icon": "ic_apple",
+      "type": "CONSUMABLE",
+      "heal": 15
+    }
+  ]
+}
