@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.idlerpg"
+    namespace = "com.example.akthosidle"
     compileSdk = 34
 
     defaultConfig {

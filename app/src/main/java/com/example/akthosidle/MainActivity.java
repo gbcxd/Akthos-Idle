@@ -1,24 +1,31 @@
 package com.example.akthosidle;
 
 import android.os.Bundle;
-
-import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
+import androidx.fragment.app.Fragment;
+
+import com.example.akthosidle.databinding.ActivityMainBinding;
+import com.example.akthosidle.ui.BattleFragment;
+import com.example.akthosidle.ui.CharacterFragment;
+import com.example.akthosidle.ui.InventoryFragment;
 
 public class MainActivity extends AppCompatActivity {
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    ActivityMainBinding b;
+    @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        EdgeToEdge.enable(this);
-        setContentView(R.layout.activity_main);
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
-            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
-            return insets;
+        b = ActivityMainBinding.inflate(getLayoutInflater());
+        setContentView(b.getRoot());
+
+        b.bottomNav.setOnItemSelectedListener(item -> {
+            Fragment f;
+            int id = item.getItemId();
+            if (id == R.id.nav_character) f = new CharacterFragment();
+            else if (id == R.id.nav_inventory) f = new InventoryFragment();
+            else f = new BattleFragment();
+            getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.container, f).commit();
+            return true;
         });
+        b.bottomNav.setSelectedItemId(R.id.nav_character);
     }
 }

@@ -5,9 +5,9 @@ import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 
-import com.example.idlerpg.battle.CombatEngine;
-import com.example.idlerpg.data.GameRepository;
-import com.example.idlerpg.model.*;
+import com.example.akthosidle.battle.CombatEngine;
+import com.example.akthosidle.data.GameRepository;
+import com.example.akthosidle.model.*;
 
 public class GameViewModel extends AndroidViewModel {
     public final GameRepository repo;
