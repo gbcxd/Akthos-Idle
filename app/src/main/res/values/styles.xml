@@ -35,6 +35,17 @@
         <item name="android:contentDescription">Equipment slot</item>
     </style>
 
+    <style name="EquipmentSlotStyle">
+        <item name="android:layout_width">64dp</item>
+        <item name="android:layout_height">64dp</item>
+        <item name="android:layout_margin">4dp</item>
+        <item name="android:background">@drawable/slot_background</item>
+        <item name="android:scaleType">centerInside</item>
+        <item name="android:adjustViewBounds">true</item>
+        <item name="android:padding">4dp</item>
+        <item name="android:backgroundTint">@color/slot_background_tint</item>
+    </style>
+
     <style name="SlotButtonSmall" parent="SlotButton">
         <item name="android:layout_width">@dimen/slot_small</item>
         <item name="android:layout_height">@dimen/slot_small</item>

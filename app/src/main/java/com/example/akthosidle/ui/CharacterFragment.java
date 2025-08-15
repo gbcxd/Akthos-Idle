@@ -92,8 +92,7 @@ public class CharacterFragment extends Fragment {
         slotIdMap.put(EquipmentSlot.SHIELD, R.id.slot_shield);
         slotIdMap.put(EquipmentSlot.BOW,    R.id.slot_bow);
         slotIdMap.put(EquipmentSlot.PANTS,  R.id.slot_pants);
-        slotIdMap.put(EquipmentSlot.RING1,  R.id.slot_ring1);
-        slotIdMap.put(EquipmentSlot.RING2,  R.id.slot_ring2);
+        slotIdMap.put(EquipmentSlot.RING1,  R.id.slot_ring);
         slotIdMap.put(EquipmentSlot.BOOTS,  R.id.slot_boots);
 
         // Click to equip picker

@@ -7,4 +7,6 @@
     <color name="slot_bg">#3A3A40</color>
     <color name="slot_border">#4D4D55</color>
     <color name="green_text">#4CAF50</color>
+    <color name="slot_border_color">#FFFFFF</color>
+    <color name="slot_background_tint">#33FFFFFF</color>
 </resources>
