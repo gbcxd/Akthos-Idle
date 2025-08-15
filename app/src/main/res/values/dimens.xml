@@ -1,0 +1,10 @@
+<resources>
+    <dimen name="p_screen_pad">12dp</dimen>
+    <dimen name="p_section_pad">16dp</dimen>
+
+    <dimen name="slot_size">88dp</dimen>
+    <dimen name="slot_small">56dp</dimen>
+    <dimen name="slot_gap">8dp</dimen>
+
+    <dimen name="bottom_icon_size">56dp</dimen>
+</resources>

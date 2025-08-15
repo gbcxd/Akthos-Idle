@@ -2,4 +2,9 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <color name="chip_bg">#2B2B2F</color>
+    <color name="slot_bg">#3A3A40</color>
+    <color name="slot_border">#4D4D55</color>
+    <color name="green_text">#4CAF50</color>
 </resources>

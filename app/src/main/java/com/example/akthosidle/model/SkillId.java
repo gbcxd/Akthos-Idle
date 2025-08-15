@@ -1,0 +1,10 @@
+package com.example.akthosidle.model;
+
+public enum SkillId {
+    // Combat
+    ATTACK, STRENGTH, DEFENSE, HP,
+    // Non-combat
+    WOODCUTTING, MINING, FISHING, GATHERING, HUNTING,
+    CRAFTING, SMITHING, COOKING, ALCHEMY, TAILORING,
+    CARPENTRY, ENCHANTING, COMMUNITY, HARVESTING
+}

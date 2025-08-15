@@ -1,4 +1,4 @@
-<!-- res/layout/fragment_character.xml -->
+<?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -7,33 +7,286 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="@dimen/p_screen_pad">
 
+        <!-- Title -->
         <TextView
-            android:id="@+id/tvStats"
-            android:layout_width="wrap_content"
+            android:id="@+id/tvTitle"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:text="Equipment"
+            android:textAlignment="center"
+            android:textSize="28sp"
             android:textStyle="bold"
-            android:textSize="18sp"
-            android:text="Stats" />
+            android:paddingBottom="8dp" />
 
+        <!-- Buff chips container -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingTop="12dp">
+            android:paddingTop="4dp">
 
-            <TextView
+            <!-- Combat buffs -->
+            <LinearLayout
+                android:id="@+id/chipCombat"
+                style="@style/ChipRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:id="@+id/combatIcons"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="start|center_vertical"
+                    android:paddingEnd="8dp" />
+
+                <TextView
+                    android:id="@+id/tvCombatPct"
+                    style="@style/ChipPct"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="23%" />
+            </LinearLayout>
+
+            <!-- Non-combat buffs -->
+            <LinearLayout
+                android:id="@+id/chipNonCombat"
+                style="@style/ChipRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp">
+
+                <LinearLayout
+                    android:id="@+id/nonCombatIcons"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="start|center_vertical"
+                    android:paddingEnd="8dp" />
+
+                <TextView
+                    android:id="@+id/tvNonCombatPct"
+                    style="@style/ChipPct"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="18%" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Equipment grid: 3 x 4 -->
+        <GridLayout
+            android:id="@+id/gridEquipment"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="3"
+            android:useDefaultMargins="false"
+            android:alignmentMode="alignMargins"
+            android:rowOrderPreserved="true"
+            android:paddingTop="@dimen/p_section_pad">
+
+            <!-- Row 1 -->
+            <ImageButton
+                android:id="@+id/slot_left_top"
+                style="@style/SlotButton"
+                android:layout_width="@dimen/slot_size"
+                android:layout_height="@dimen/slot_size"
+                android:contentDescription="Trinket" />
+            <ImageButton
+                android:id="@+id/slot_helmet"
+                style="@style/SlotButton"
+                android:layout_width="@dimen/slot_size"
+                android:layout_height="@dimen/slot_size" />
+            <ImageButton
+                android:id="@+id/slot_cape"
+                style="@style/SlotButton"
+                android:layout_width="@dimen/slot_size"
+                android:layout_height="@dimen/slot_size" />
+
+            <!-- Row 2 -->
+            <ImageButton
+                android:id="@+id/slot_gloves"
+                style="@style/SlotButton"
+                android:layout_width="@dimen/slot_size"
+                android:layout_height="@dimen/slot_size" />
+            <ImageButton
+                android:id="@+id/slot_armor"
+                style="@style/SlotButton"
+                android:layout_width="@dimen/slot_size"
+                android:layout_height="@dimen/slot_size" />
+            <ImageButton
+                android:id="@+id/slot_shield"
+                style="@style/SlotButton"
+                android:layout_width="@dimen/slot_size"
+                android:layout_height="@dimen/slot_size" />
+
+            <!-- Row 3 -->
+            <ImageButton
+                android:id="@+id/slot_bow"
+                style="@style/SlotButton"
+                android:layout_width="@dimen/slot_size"
+                android:layout_height="@dimen/slot_size" />
+            <ImageButton
+                android:id="@+id/slot_pants"
+                style="@style/SlotButton"
+                android:layout_width="@dimen/slot_size"
+                android:layout_height="@dimen/slot_size" />
+            <ImageButton
+                android:id="@+id/slot_ring1"
+                style="@style/SlotButton"
+                android:layout_width="@dimen/slot_size"
+                android:layout_height="@dimen/slot_size" />
+
+            <!-- Row 4 -->
+            <ImageButton
+                android:id="@+id/slot_weapon"
+                style="@style/SlotButton"
+                android:layout_width="@dimen/slot_size"
+                android:layout_height="@dimen/slot_size" />
+            <ImageButton
+                android:id="@+id/slot_boots"
+                style="@style/SlotButton"
+                android:layout_width="@dimen/slot_size"
+                android:layout_height="@dimen/slot_size" />
+            <ImageButton
+                android:id="@+id/slot_ring2"
+                style="@style/SlotButton"
+                android:layout_width="@dimen/slot_size"
+                android:layout_height="@dimen/slot_size" />
+        </GridLayout>
+
+        <!-- Small potions button row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingTop="@dimen/slot_gap"
+            android:gravity="start|center_vertical">
+            <ImageButton
+                android:id="@+id/btnPotions"
+                style="@style/SlotButtonSmall"
+                android:layout_width="@dimen/slot_small"
+                android:layout_height="@dimen/slot_small"
+                android:contentDescription="Potions" />
+        </LinearLayout>
+
+        <!-- Stats chip + food chip row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="@dimen/p_section_pad">
+
+            <!-- Stats chip -->
+            <LinearLayout
+                android:id="@+id/chipStats"
+                style="@style/ChipRow"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_sword" />
+                <TextView
+                    android:id="@+id/tvAtkVal"
+                    style="@style/ChipStat"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0" />
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginStart="10dp"
+                    android:src="@drawable/ic_shield" />
+                <TextView
+                    android:id="@+id/tvDefVal"
+                    style="@style/ChipStat"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0" />
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginStart="10dp"
+                    android:src="@drawable/ic_heart" />
+                <TextView
+                    android:id="@+id/tvHpVal"
+                    style="@style/ChipStat"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0" />
+            </LinearLayout>
+
+            <!-- Food chip -->
+            <LinearLayout
+                android:id="@+id/chipFood"
+                style="@style/ChipRow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Equipment"
-                android:textStyle="bold" />
+                android:layout_marginStart="12dp">
+                <ImageView
+                    android:id="@+id/imgFood"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_food_apple" />
+                <TextView
+                    android:id="@+id/tvFoodHeals"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="+0"
+                    android:textStyle="bold"
+                    android:textColor="@color/green_text"
+                    android:layout_marginStart="6dp"/>
+            </LinearLayout>
+        </LinearLayout>
 
-            <TextView
-                android:id="@+id/tvEquipment"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="No equipment yet" />
+        <!-- Bottom action bar -->
+        <LinearLayout
+            android:id="@+id/bottomBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="@dimen/p_section_pad">
+
+            <ImageButton
+                android:id="@+id/btnCombat"
+                style="@style/BottomIcon"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/bottom_icon_size"
+                android:layout_weight="1" />
+            <ImageButton
+                android:id="@+id/btnCharacter"
+                style="@style/BottomIcon"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/bottom_icon_size"
+                android:layout_weight="1" />
+            <ImageButton
+                android:id="@+id/btnStats"
+                style="@style/BottomIcon"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/bottom_icon_size"
+                android:layout_weight="1" />
+            <ImageButton
+                android:id="@+id/btnInventory"
+                style="@style/BottomIcon"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/bottom_icon_size"
+                android:layout_weight="1" />
+            <ImageButton
+                android:id="@+id/btnSettings"
+                style="@style/BottomIcon"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/bottom_icon_size"
+                android:layout_weight="1" />
         </LinearLayout>
 
     </LinearLayout>

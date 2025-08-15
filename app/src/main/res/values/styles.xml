@@ -1,0 +1,53 @@
+<resources>
+    <style name="ChipRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/bg_chip</item>
+        <item name="android:paddingLeft">12dp</item>
+        <item name="android:paddingRight">12dp</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">8dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <style name="ChipPct">
+        <item name="android:textColor">@color/green_text</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="ChipStat">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/green_text</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:layout_marginStart">4dp</item>
+    </style>
+
+    <style name="SlotButton">
+        <item name="android:layout_width">@dimen/slot_size</item>
+        <item name="android:layout_height">@dimen/slot_size</item>
+        <item name="android:layout_margin">@dimen/slot_gap</item>
+        <item name="android:scaleType">centerInside</item>
+        <item name="android:background">@drawable/bg_slot</item>
+        <item name="android:src">@drawable/ic_slot_empty</item>
+        <item name="android:contentDescription">Equipment slot</item>
+    </style>
+
+    <style name="SlotButtonSmall" parent="SlotButton">
+        <item name="android:layout_width">@dimen/slot_small</item>
+        <item name="android:layout_height">@dimen/slot_small</item>
+        <item name="android:src">@drawable/ic_potion</item>
+    </style>
+
+    <style name="BottomIcon">
+        <item name="android:layout_width">@dimen/bottom_icon_size</item>
+        <item name="android:layout_height">@dimen/bottom_icon_size</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@drawable/bg_slot</item>
+        <item name="android:src">@drawable/ic_nav_placeholder</item>
+        <item name="android:scaleType">centerInside</item>
+        <item name="android:layout_margin">6dp</item>
+    </style>
+</resources>

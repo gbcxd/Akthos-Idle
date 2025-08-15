@@ -1,15 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical" android:padding="16dp"
-    android:layout_width="match_parent" android:layout_height="match_parent">
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
 
-    <TextView android:id="@+id/tvMonster" android:textSize="18sp" android:textStyle="bold"
-        android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+    <TextView
+        android:id="@+id/tvMonster"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Monster"
+        android:textStyle="bold"
+        android:textSize="20sp"
+        android:paddingBottom="8dp"/>
 
-    <TextView android:id="@+id/tvHP" android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:paddingTop="8dp"/>
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Player HP"/>
+    <ProgressBar
+        android:id="@+id/barPlayerHp"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="10dp"
+        android:max="100"
+        android:progress="100"/>
 
-    <LinearLayout android:orientation="horizontal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingTop="12dp">
-        <Button android:id="@+id/btnStart" android:text="Fight Shadow Thief" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-        <Button android:id="@+id/btnStop" android:text="Stop" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp"/>
-    </LinearLayout>
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Monster HP"
+        android:layout_marginTop="12dp"/>
+    <ProgressBar
+        android:id="@+id/barMonsterHp"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="10dp"
+        android:max="100"
+        android:progress="100"/>
+
+    <TextView
+        android:id="@+id/tvPlayerHp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="--/--"
+        android:layout_marginTop="6dp"/>
+
+    <TextView
+        android:id="@+id/tvMonsterHp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="--/--"
+        android:layout_marginTop="2dp"/>
+
+    <Button
+        android:id="@+id/btnToggle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Start"
+        android:layout_marginTop="16dp"/>
 </LinearLayout>

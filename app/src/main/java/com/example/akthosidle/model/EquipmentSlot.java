@@ -1,2 +1,16 @@
 package com.example.akthosidle.model;
-public enum EquipmentSlot { HEAD, NECK, CAPE, CHEST, GLOVES, LEGS, RING, BOOTS, WEAPON, OFFHAND }
+
+// Matches your requested UI
+public enum EquipmentSlot {
+    WEAPON,
+    HELMET,
+    CAPE,
+    GLOVES,
+    ARMOR,     // (chest)
+    SHIELD,
+    BOW,
+    PANTS,     // (legs)
+    RING1,
+    RING2,
+    BOOTS
+}
