@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:padding="8dp">
+
+    <ImageButton
+        android:id="@+id/img"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_slot_square"
+        android:contentDescription="@string/app_name"
+        android:src="@drawable/ic_food_apple" />
+
+    <TextView
+        android:id="@+id/tvName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Apple"
+        android:paddingTop="4dp"/>
+
+    <TextView
+        android:id="@+id/tvQty"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="x1"
+        android:textStyle="bold"/>
+</LinearLayout>

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- Top row: Syrup | All | Combat | Non-Combat | Sort -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <ImageButton
+            android:id="@+id/btnSyrup"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:contentDescription="Syrup"
+            android:src="@drawable/ic_flask"
+            android:background="@drawable/bg_slot_square" />
+
+        <ToggleButton
+            android:id="@+id/tAll"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:textOn="All"
+            android:textOff="All"
+            android:checked="true"/>
+
+        <ToggleButton
+            android:id="@+id/tCombat"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
+            android:textOn="Combat"
+            android:textOff="Combat"/>
+
+        <ToggleButton
+            android:id="@+id/tNonCombat"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
+            android:textOn="Non-Combat"
+            android:textOff="Non-Combat"/>
+
+        <ImageButton
+            android:id="@+id/btnSort"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:contentDescription="Sort"
+            android:src="@drawable/ic_sort"
+            android:background="@drawable/bg_slot_square"/>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvEmpty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="No potions for this filter."
+        android:visibility="gone"
+        android:padding="8dp"
+        android:textAlignment="center"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvPotions"
+        android:layout_width="match_parent"
+        android:layout_height="340dp"
+        android:paddingTop="8dp" />
+
+</LinearLayout>

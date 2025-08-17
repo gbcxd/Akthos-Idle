@@ -1,237 +1,386 @@
 package com.example.akthosidle.data;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 
 import androidx.annotation.Nullable;
 
+import com.example.akthosidle.model.Drop;
 import com.example.akthosidle.model.EquipmentSlot;
+import com.example.akthosidle.model.InventoryItem;
 import com.example.akthosidle.model.Item;
 import com.example.akthosidle.model.Monster;
 import com.example.akthosidle.model.PlayerCharacter;
-import com.example.akthosidle.model.Skill;
 import com.example.akthosidle.model.SkillId;
 import com.example.akthosidle.model.Stats;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Central game data repo: loads static definitions, manages the save, and provides helpers.
- */
 public class GameRepository {
 
-    private static final String KEY_PLAYER = "player_v1";
+    private static final String SP_NAME = "akthos_idle_save";
+    private static final String KEY_PLAYER = "player_json";
 
-    private final Context ctx;
-    private final Prefs prefs;
+    private final Context app;
+    private final SharedPreferences sp;
     private final Gson gson = new Gson();
 
-    public final Map<String, Item> items = new HashMap<>();
-    public final Map<String, Monster> monsters = new HashMap<>();
+    // Definitions
+    private final Map<String, Item> items = new HashMap<>();
+    private final Map<String, Monster> monsters = new HashMap<>();
 
+    // Runtime save
     private PlayerCharacter player;
 
-    public GameRepository(Context ctx) {
-        this.ctx = ctx.getApplicationContext();
-        this.prefs = new Prefs(this.ctx);
+    public GameRepository(Context appContext) {
+        this.app = appContext.getApplicationContext();
+        this.sp = app.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
     }
 
-    /** Load items/monsters from assets (call once from ViewModel ctor). */
+    /* =========================================================
+     * Load static definitions (items / monsters).
+     * ========================================================= */
     public void loadDefinitions() {
-        try {
-            // Items
-            String itemJson = JsonUtils.readAsset(ctx, "items.json");
-            Type itemsType = new TypeToken<Map<String, List<Item>>>() {}.getType();
-            Map<String, List<Item>> iw = gson.fromJson(itemJson, itemsType);
-            items.clear();
-            for (Item it : iw.getOrDefault("items", List.of())) {
-                items.put(it.id, it);
-            }
+        if (!items.isEmpty() || !monsters.isEmpty()) return;
 
-            // Monsters
-            String monsJson = JsonUtils.readAsset(ctx, "monsters.json");
-            Type monsType = new TypeToken<Map<String, List<Monster>>>() {}.getType();
-            Map<String, List<Monster>> mw = gson.fromJson(monsJson, monsType);
-            monsters.clear();
-            for (Monster m : mw.getOrDefault("monsters", List.of())) {
-                monsters.put(m.id, m);
-            }
-        } catch (Exception e) {
-            throw new RuntimeException("Failed loading game definitions", e);
-        }
+        // ---------- Items (using your Item.java shape) ----------
+        // Equipment
+        Item rustySword = new Item();
+        rustySword.id = "wpn_rusty_sword";
+        rustySword.name = "Rusty Sword";
+        rustySword.icon = "ic_sword";
+        rustySword.type = "EQUIPMENT";
+        rustySword.slot = "WEAPON"; // must match EquipmentSlot enum name
+        rustySword.rarity = "COMMON";
+        rustySword.stats = new Stats(3, 0, 0.0, 0, 0.0, 0.0);
+        items.put(rustySword.id, rustySword);
+
+        Item leatherCap = new Item();
+        leatherCap.id = "helm_leather_cap";
+        leatherCap.name = "Leather Cap";
+        leatherCap.icon = "ic_helmet";
+        leatherCap.type = "EQUIPMENT";
+        leatherCap.slot = "HELMET";
+        leatherCap.rarity = "COMMON";
+        leatherCap.stats = new Stats(0, 1, 0.0, 5, 0.0, 0.0);
+        items.put(leatherCap.id, leatherCap);
+
+        // Food (CONSUMABLE + heal)
+        Item apple = new Item();
+        apple.id = "food_apple";
+        apple.name = "Apple";
+        apple.icon = "ic_food_apple";
+        apple.type = "CONSUMABLE";
+        apple.rarity = "COMMON";
+        apple.heal = 10;
+        items.put(apple.id, apple);
+
+        // Basic “combat” potion (consumable that affects combat via stats)
+        Item warDraught = new Item();
+        warDraught.id = "pot_basic_combat";
+        warDraught.name = "War Draught";
+        warDraught.icon = "ic_potion_red";
+        warDraught.type = "CONSUMABLE";
+        warDraught.rarity = "UNCOMMON";
+        warDraught.stats = new Stats(2, 0, 0.0, 0, 0.05, 0.0); // +ATK, +CritChance
+        items.put(warDraught.id, warDraught);
+
+        // Basic “non-combat” potion (consumable that buffs gathering skill)
+        Item focusTonic = new Item();
+        focusTonic.id = "pot_basic_noncombat";
+        focusTonic.name = "Focus Tonic";
+        focusTonic.icon = "ic_potion_blue";
+        focusTonic.type = "CONSUMABLE";
+        focusTonic.rarity = "UNCOMMON";
+        focusTonic.skillBuffs = new HashMap<>();
+        focusTonic.skillBuffs.put("MINING", 5); // example
+        items.put(focusTonic.id, focusTonic);
+
+        // “Syrup” special consumable
+        Item syrup = new Item();
+        syrup.id = "syrup_basic";
+        syrup.name = "Syrup";
+        syrup.icon = "ic_flask";
+        syrup.type = "CONSUMABLE";
+        syrup.rarity = "UNCOMMON";
+        syrup.heal = 20;
+        items.put(syrup.id, syrup);
+
+        // ---------- Monsters ----------
+        Monster thief = new Monster();
+        thief.id = "shadow_thief";
+        thief.name = "Shadow Thief";
+        thief.stats = new Stats(8, 4, 0.15, 40, 0.05, 1.5);
+        thief.exp = 20;
+        thief.drops = new ArrayList<>();
+        thief.drops.add(new Drop("food_apple", 1, 3, 0.5));
+        monsters.put(thief.id, thief);
     }
 
-    /** Load player from disk or create a fresh one; also runs migrations/initializers. */
+    /* ============================
+     * Player Save / Load
+     * ============================ */
     public PlayerCharacter loadOrCreatePlayer() {
         if (player != null) return player;
 
-        String json = prefs.getJson(KEY_PLAYER);
+        String json = sp.getString(KEY_PLAYER, null);
         if (json != null) {
-            player = gson.fromJson(json, PlayerCharacter.class);
-        } else {
-            player = new PlayerCharacter();
-            // starter kit example
-            addItemToBag(player, "steel_sword", 1);
-            addItemToBag(player, "apple", 5);
-        }
-
-        // ---- One-time initializations / migrations ----
-
-        // Ensure skills exist (all Lv1)
-        if (player.skills == null || player.skills.isEmpty()) {
-            player.skills = new EnumMap<>(SkillId.class);
-            for (SkillId id : SkillId.values()) {
-                player.skills.put(id, new Skill(1, 0));
+            Type t = new TypeToken<PlayerCharacter>() {}.getType();
+            player = gson.fromJson(json, t);
+            // Defensive: ensure non-null fields after older saves
+            if (player.bag == null) player.bag = new HashMap<>();
+            if (player.equipment == null) player.equipment = new EnumMap<>(EquipmentSlot.class);
+            if (player.skills == null) player.skills = new EnumMap<>(SkillId.class);
+            // Initialize currentHp if missing
+            if (player.currentHp == null) {
+                int maxHp = totalStats().health; // base + gear
+                player.currentHp = maxHp;
+                save();
             }
+            return player;
         }
 
-        // Migrate legacy equipment slot names to new schema
-        migrateEquipmentSlots(player);
+        // Create new player
+        player = new PlayerCharacter();
 
-        // Initialize current HP to max if missing
+        // Starter inventory
+        addToBag("wpn_rusty_sword", 1);
+        addToBag("helm_leather_cap", 1);
+        addToBag("food_apple", 5);
+        addToBag("pot_basic_combat", 2);
+        addToBag("pot_basic_noncombat", 2);
+        addToBag("syrup_basic", 1);
+
+        // First-time HP init to max
         if (player.currentHp == null) {
-            Stats gear = gearStats(player);
-            int maxHp = Math.max(1, player.totalStats(gear).health);
+            int maxHp = totalStats().health; // base only for brand new char
             player.currentHp = maxHp;
         }
 
-        // Ensure maps not null
-        if (player.bag == null) player.bag = new HashMap<>();
-        if (player.equipment == null) player.equipment = new EnumMap<>(EquipmentSlot.class);
-
+        save();
         return player;
     }
 
-    /** Persist player. Call this after any mutation. */
     public void save() {
-        if (player != null) {
-            prefs.putJson(KEY_PLAYER, gson.toJson(player));
+        if (player == null) return;
+        sp.edit().putString(KEY_PLAYER, gson.toJson(player)).apply();
+    }
+
+    /* ============================
+     * Lookups & helpers
+     * ============================ */
+    public @Nullable Item getItem(String id) { return items.get(id); }
+    public @Nullable Monster getMonster(String id) { return monsters.get(id); }
+
+    public @Nullable EquipmentSlot slotOf(Item it) {
+        if (it == null || it.slot == null) return null;
+        try {
+            return EquipmentSlot.valueOf(it.slot);
+        } catch (IllegalArgumentException e) {
+            try {
+                return EquipmentSlot.valueOf(it.slot.toUpperCase());
+            } catch (Exception ignored) {}
+            return null;
         }
     }
 
-    public Item getItem(String id) { return items.get(id); }
-    public Monster getMonster(String id) { return monsters.get(id); }
-
-    /**
-     * Sum gear stats from all equipped items (ignores nulls).
-     * NOTE: Stats.speed is treated as an additive bonus (e.g., 0.20 = +20% attack speed).
-     */
+    /** Sum of equipped gear Stats (uses Item.stats). */
     public Stats gearStats(PlayerCharacter pc) {
-        Stats sum = new Stats(0, 0, 0.0, 0, 0.0, 1.5); // critMultiplier: keep max later
-        if (pc.equipment == null) return sum;
-
+        Stats sum = new Stats(0, 0, 0.0, 0, 0.0, 0.0);
+        if (pc == null || pc.equipment == null) return sum;
         for (Map.Entry<EquipmentSlot, String> e : pc.equipment.entrySet()) {
-            Item it = items.get(e.getValue());
+            Item it = getItem(e.getValue());
             if (it != null && it.stats != null) {
-                sum = Stats.add(sum, it.stats);
+                sum.attack     += it.stats.attack;
+                sum.defense    += it.stats.defense;
+                sum.speed      += it.stats.speed;
+                sum.health     += it.stats.health;
+                sum.critChance += it.stats.critChance;
+                sum.critMultiplier = Math.max(sum.critMultiplier, it.stats.critMultiplier);
             }
         }
         return sum;
     }
 
-    /**
-     * Map an item's slot string (handles legacy values) to the new EquipmentSlot enum.
-     * Legacy: CHEST->ARMOR, LEGS->PANTS, OFFHAND->SHIELD.
-     */
-    public @Nullable EquipmentSlot slotOf(Item item) {
-        if (item == null || item.slot == null) return null;
-        String s = item.slot.trim().toUpperCase();
+    /** Current total stats = base + gear (matches PlayerCharacter.totalStats usage). */
+    public Stats totalStats() {
+        PlayerCharacter pc = loadOrCreatePlayer();
+        return pc.totalStats(gearStats(pc));
+    }
 
-        // Legacy aliases
-        if (s.equals("CHEST")) s = "ARMOR";
-        if (s.equals("LEGS")) s = "PANTS";
-        if (s.equals("OFFHAND")) s = "SHIELD";
+    private void addToBag(String id, int qty) {
+        loadOrCreatePlayer(); // ensure player exists
+        player.bag.put(id, player.bag.getOrDefault(id, 0) + qty);
+    }
 
-        try {
-            return EquipmentSlot.valueOf(s);
-        } catch (IllegalArgumentException ex) {
-            return null;
+    /* ============================
+     * Food & Potions API (matches UI)
+     * ============================ */
+
+    /** Food = CONSUMABLE with heal > 0. */
+    public List<InventoryItem> getFoodItems() {
+        List<InventoryItem> list = new ArrayList<>();
+        PlayerCharacter pc = loadOrCreatePlayer();
+
+        for (Map.Entry<String, Integer> e : pc.bag.entrySet()) {
+            String id = e.getKey();
+            int qty = e.getValue();
+            Item it = getItem(id);
+            if (isFood(it)) list.add(new InventoryItem(id, it.name, qty));
         }
+        return list;
     }
 
     /**
-     * Aggregate skill buffs from equipped items.
-     * Items may define: item.skillBuffs : Map<String skillName, Integer bonus>
-     * e.g., {"ATTACK": 3, "MINING": 5}
+     * Potions = CONSUMABLE that are NOT food.
+     * - combatOnly: affects combat (stats != null OR skillBuffs contains combat skills)
+     * - nonCombatOnly: affects only non-combat skills
+     * If both flags false -> return all potions.
      */
-    public Map<String, Integer> aggregatedSkillBuffs(PlayerCharacter pc) {
-        Map<String, Integer> out = new HashMap<>();
-        if (pc.equipment == null) return out;
+    public List<InventoryItem> getPotions(boolean combatOnly, boolean nonCombatOnly) {
+        List<InventoryItem> list = new ArrayList<>();
+        PlayerCharacter pc = loadOrCreatePlayer();
 
-        for (Map.Entry<EquipmentSlot, String> e : pc.equipment.entrySet()) {
-            Item it = items.get(e.getValue());
-            if (it != null && it.skillBuffs != null) {
-                for (Map.Entry<String, Integer> b : it.skillBuffs.entrySet()) {
-                    String key = b.getKey();
-                    Integer val = b.getValue();
-                    if (key == null || val == null) continue;
-                    out.put(key, out.getOrDefault(key, 0) + val);
+        for (Map.Entry<String, Integer> e : pc.bag.entrySet()) {
+            String id = e.getKey();
+            int qty = e.getValue();
+            Item it = getItem(id);
+            if (!isPotion(it)) continue;
+
+            boolean isCombat = isCombatPotion(it);
+            boolean isNonCombat = isNonCombatPotion(it);
+
+            if (combatOnly && !isCombat) continue;
+            if (nonCombatOnly && !isNonCombat) continue;
+
+            list.add(new InventoryItem(id, it.name, qty));
+        }
+        return list;
+    }
+
+    /** Consume a potion (not food). Currently applies simple immediate effects and decrements qty. */
+    public void consumePotion(String potionId) {
+        PlayerCharacter pc = loadOrCreatePlayer();
+        Integer have = pc.bag.get(potionId);
+        if (have == null || have <= 0) return;
+
+        Item it = getItem(potionId);
+        if (it == null || !isPotion(it)) return;
+
+        // Minimal immediate effects: if potion has heal, treat as instant heal.
+        if (it.heal != null && it.heal > 0) {
+            int maxHp = totalStats().health;
+            int cur = pc.currentHp == null ? maxHp : pc.currentHp;
+            pc.currentHp = Math.min(maxHp, Math.max(0, cur) + it.heal);
+        }
+
+        // Decrement inventory
+        pc.bag.put(potionId, have - 1);
+        if (pc.bag.get(potionId) != null && pc.bag.get(potionId) <= 0) pc.bag.remove(potionId);
+
+        save();
+    }
+
+    /** “Syrup” action: find a consumable with 'syrup' in id/name and heal or apply a tiny speed bonus. */
+    public void consumeSyrup() {
+        PlayerCharacter pc = loadOrCreatePlayer();
+        String syrupId = null;
+        for (String id : new HashSet<>(pc.bag.keySet())) {
+            Item it = getItem(id);
+            if (it != null && "CONSUMABLE".equals(it.type)) {
+                if ((it.id != null && it.id.toLowerCase().contains("syrup")) ||
+                        (it.name != null && it.name.toLowerCase().contains("syrup"))) {
+                    syrupId = id;
+                    break;
                 }
             }
         }
-        return out;
+        if (syrupId == null) return;
+
+        Item syrup = getItem(syrupId);
+        if (syrup != null && syrup.heal != null && syrup.heal > 0) {
+            int maxHp = totalStats().health;
+            int cur = pc.currentHp == null ? maxHp : pc.currentHp;
+            pc.currentHp = Math.min(maxHp, Math.max(0, cur) + syrup.heal);
+        } else {
+            // tiny permanent speed nudge as placeholder (until you add timed buffs)
+            pc.base.speed += 0.05;
+        }
+
+        Integer have = pc.bag.get(syrupId);
+        if (have != null) {
+            pc.bag.put(syrupId, have - 1);
+            if (pc.bag.get(syrupId) != null && pc.bag.get(syrupId) <= 0) pc.bag.remove(syrupId);
+        }
+        save();
     }
 
-    // ---------- Helpers ----------
-
-    private void addItemToBag(PlayerCharacter pc, String itemId, int qty) {
-        if (qty == 0) return;
-        if (pc.bag == null) pc.bag = new HashMap<>();
-        pc.bag.put(itemId, pc.bag.getOrDefault(itemId, 0) + qty);
-        if (pc.bag.get(itemId) != null && pc.bag.get(itemId) <= 0) {
-            pc.bag.remove(itemId);
+    /* ============================
+     * Generic bag listing (optional helper)
+     * ============================ */
+    public List<InventoryItem> getBagAsList() {
+        List<InventoryItem> list = new ArrayList<>();
+        PlayerCharacter pc = loadOrCreatePlayer();
+        for (Map.Entry<String, Integer> e : pc.bag.entrySet()) {
+            Item it = getItem(e.getKey());
+            if (it != null) list.add(new InventoryItem(it.id, it.name, e.getValue()));
         }
+        return list;
     }
 
-    /** Convert any legacy equipment slot keys in the save to the new enum names. */
-    private void migrateEquipmentSlots(PlayerCharacter pc) {
-        if (pc.equipment == null) {
-            pc.equipment = new EnumMap<>(EquipmentSlot.class);
-            return;
-        }
+    /* ============================
+     * Classification helpers
+     * ============================ */
+    private boolean isFood(@Nullable Item it) {
+        return it != null
+                && "CONSUMABLE".equals(it.type)
+                && it.heal != null
+                && it.heal > 0;
+    }
 
-        // If equipment map already uses the new enum keys properly, nothing to do.
-        // Older saves might have persisted strings or used different enum members.
-        Map<EquipmentSlot, String> migrated = new EnumMap<>(EquipmentSlot.class);
+    private boolean isPotion(@Nullable Item it) {
+        return it != null
+                && "CONSUMABLE".equals(it.type)
+                && !isFood(it); // i.e., any consumable that isn't food
+    }
 
-        for (Map.Entry<EquipmentSlot, String> e : pc.equipment.entrySet()) {
-            EquipmentSlot slot = e.getKey();
-            String itemId = e.getValue();
-            if (itemId == null) continue;
-
-            // Slots CHEST/LEGS/OFFHAND no longer exist in enum; map them by item.slot if needed.
-            // (This path is defensive; typical legacy saves encoded the enum, so keys are valid.)
-            if (slot == null) {
-                Item it = items.get(itemId);
-                EquipmentSlot resolved = slotOf(it);
-                if (resolved != null) migrated.put(resolved, itemId);
-                continue;
-            }
-
-            migrated.put(slot, itemId);
-        }
-
-        // Additionally: if some items were in now-legacy slots, move by reading the item’s declared slot
-        for (Map.Entry<EquipmentSlot, String> e : new HashMap<>(migrated).entrySet()) {
-            String itemId = e.getValue();
-            Item it = items.get(itemId);
-            EquipmentSlot shouldBe = slotOf(it);
-            if (shouldBe != null && shouldBe != e.getKey()) {
-                migrated.remove(e.getKey());
-                // If collision, keep the first-equipped; new one goes to bag.
-                if (!migrated.containsKey(shouldBe)) {
-                    migrated.put(shouldBe, itemId);
-                } else {
-                    addItemToBag(pc, itemId, 1);
-                }
+    /** Detects if a potion has combat impact. */
+    private boolean isCombatPotion(Item it) {
+        if (it == null) return false;
+        if (it.stats != null) return true; // direct combat stats
+        if (it.skillBuffs != null) {
+            for (String key : it.skillBuffs.keySet()) {
+                if (isCombatSkill(key)) return true;
             }
         }
+        return false;
+    }
 
-        pc.equipment = migrated;
+    /** Detects if a potion buffs non-combat skills only. */
+    private boolean isNonCombatPotion(Item it) {
+        if (it == null) return false;
+        boolean hasAny = false;
+        if (it.skillBuffs != null) {
+            for (String key : it.skillBuffs.keySet()) {
+                hasAny = true;
+                if (isCombatSkill(key)) return false; // contains combat skill -> not purely non-combat
+            }
+        }
+        // If it has skill buffs and none are combat -> non-combat
+        return hasAny;
+    }
+
+    private boolean isCombatSkill(String skill) {
+        if (skill == null) return false;
+        String k = skill.toUpperCase();
+        return k.equals("ATTACK") || k.equals("STRENGTH") || k.equals("DEFENSE") || k.equals("HP");
     }
 }

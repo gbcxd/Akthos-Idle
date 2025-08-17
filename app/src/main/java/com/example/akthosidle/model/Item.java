@@ -2,19 +2,22 @@ package com.example.akthosidle.model;
 
 import java.util.Map;
 
+/** Item definition usable for equipment, consumables, or materials. */
 public class Item {
     public String id;
     public String name;
     public String icon;
-    public String type;          // EQUIPMENT | CONSUMABLE | MATERIAL
-    public String slot;          // now matches EquipmentSlot names above (or legacy; see repo)
+    /** "EQUIPMENT" | "CONSUMABLE" | "MATERIAL" */
+    public String type;
+    /** For equipment: must match EquipmentSlot enum name (e.g., "WEAPON"). */
+    public String slot;
     public String rarity;
-    public Stats stats;          // combat stats
+    /** Combat stats (used by equipment and certain consumables). */
+    public Stats stats;
 
-    public Integer heal;         // if CONSUMABLE food
+    /** Food heal amount if this is a consumable food. */
+    public Integer heal;
 
-    // NEW: optional skill buffs from gear (percent or flat, your choice)
-    // Example JSON:
-    // "skillBuffs": { "ATTACK": 3, "MINING": 5 }
+    /** Optional skill buffs (e.g., {"ATTACK":3,"MINING":5}). */
     public Map<String, Integer> skillBuffs;
 }

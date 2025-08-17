@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/nav_battle"
+        android:icon="@drawable/ic_swords"
+        android:title="Battle" />
+
+    <item
+        android:id="@+id/nav_character"
+        android:icon="@drawable/ic_helmet"
+        android:title="Character" />
+
+    <item
+        android:id="@+id/nav_inventory"
+        android:icon="@drawable/ic_backpack"
+        android:title="Inventory" />
+
+    <!-- NEW -->
+    <item
+        android:id="@+id/nav_skills"
+        android:icon="@drawable/ic_skill_tree"
+        android:title="Skills" />
+
+    <!-- NEW -->
+    <item
+        android:id="@+id/nav_settings"
+        android:icon="@drawable/ic_gear"
+        android:title="Settings" />
+
+</menu>

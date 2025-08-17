@@ -1,16 +1,15 @@
 package com.example.akthosidle.model;
 
-// Matches your requested UI
+/** Equipment slot identifiers used by PlayerCharacter.equipment and Item.slot. */
 public enum EquipmentSlot {
     WEAPON,
     HELMET,
     CAPE,
     GLOVES,
-    ARMOR,     // (chest)
+    ARMOR,
     SHIELD,
     BOW,
-    PANTS,     // (legs)
-    RING1,
-    RING2,
+    PANTS,
+    RING,   // single ring
     BOOTS
 }

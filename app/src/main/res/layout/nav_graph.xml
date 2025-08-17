@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/nav_battle">
+
+    <!-- Existing destinations (ensure the class names/paths match your project) -->
+    <fragment
+        android:id="@+id/nav_battle"
+        android:name="com.example.akthosidle.ui.BattleFragment"
+        android:label="Battle"
+        tools:layout="@layout/fragment_battle" />
+
+    <fragment
+        android:id="@+id/nav_character"
+        android:name="com.example.akthosidle.ui.CharacterFragment"
+        android:label="Character"
+        tools:layout="@layout/fragment_character" />
+
+    <fragment
+        android:id="@+id/nav_inventory"
+        android:name="com.example.akthosidle.ui.InventoryFragment"
+        android:label="Inventory"
+        tools:layout="@layout/fragment_inventory" />
+
+    <!-- NEW: Skills -->
+    <fragment
+        android:id="@+id/nav_skills"
+        android:name="com.example.akthosidle.ui.SkillsFragment"
+        android:label="Skills"
+        tools:layout="@layout/fragment_skills" />
+
+    <!-- NEW: Settings -->
+    <fragment
+        android:id="@+id/nav_settings"
+        android:name="com.example.akthosidle.ui.SettingsFragment"
+        android:label="Settings"
+        tools:layout="@layout/fragment_settings" />
+
+</navigation>
