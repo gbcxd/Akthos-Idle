@@ -8,7 +8,6 @@ import androidx.lifecycle.MutableLiveData;
 
 import com.example.akthosidle.data.GameRepository;
 import com.example.akthosidle.model.Drop;
-import com.example.akthosidle.model.GameMath;
 import com.example.akthosidle.model.Monster;
 import com.example.akthosidle.model.PlayerCharacter;
 import com.example.akthosidle.model.Stats;
@@ -18,12 +17,22 @@ import java.util.Random;
 public class CombatEngine {
     public static class BattleState {
         public String monsterId;
-        public int playerHp;
-        public int monsterHp;
-        public boolean running;
+        public String monsterName;
 
-        // NEW: 0..1 fill for the player's attack progress bar
-        public double playerAttackProgress;
+        public int playerHp;
+        public int playerMaxHp;
+        public int monsterHp;
+        public int monsterMaxHp;
+
+        /** 0..1 progress toward next attack */
+        public float playerAttackProgress;
+        public float monsterAttackProgress;
+
+        /** Current attack intervals (seconds) so the UI can label/sync */
+        public float playerAttackInterval;
+        public float monsterAttackInterval;
+
+        public boolean running;
     }
 
     private final GameRepository repo;
@@ -32,11 +41,13 @@ public class CombatEngine {
     private final Random rng = new Random();
 
     // internal
-    private double pTimer = 0, mTimer = 0; // seconds since last attack
-    private double pAttackInterval = 4.0, mAttackInterval = 2.5;
+    private double pTimer = 0, mTimer = 0; // seconds
     private Stats pStats, mStats;
     private Monster monster;
     private PlayerCharacter pc;
+
+    // cache current intervals for progress calculation
+    private double pAtkItv = 2.5, mAtkItv = 2.5;
 
     public CombatEngine(GameRepository repo) { this.repo = repo; }
 
@@ -45,26 +56,26 @@ public class CombatEngine {
     public void start(String monsterId) {
         this.pc = repo.loadOrCreatePlayer();
         this.monster = repo.getMonster(monsterId);
+        if (monster == null) return;
 
-        // compute stats
-        Stats gear = repo.gearStats(pc);
-        this.pStats = pc.totalStats(gear);
+        this.pStats = pc.totalStats(repo.gearStats(pc));
         this.mStats = monster.stats;
-
-        // intervals (player uses skill+gear formula; monster still uses old speed rule)
-        this.pAttackInterval = GameMath.attackIntervalSeconds(pc, gear); // base 4.0s, faster with ATTACK level + gear speed
-        this.mAttackInterval = Math.max(0.6, 2.5 - mStats.speed * 2.5);
-
-        // HP init
-        int maxPlayerHp = GameMath.maxHp(pc, gear);
-        if (pc.currentHp == null) pc.currentHp = maxPlayerHp;
 
         BattleState s = new BattleState();
         s.monsterId = monsterId;
-        s.playerHp = clamp(pc.currentHp, 1, maxPlayerHp);
-        s.monsterHp = Math.max(1, mStats.health);
+        s.monsterName = monster.name;
+
+        s.playerMaxHp = Math.max(1, pStats.health);
+        s.monsterMaxHp = Math.max(1, mStats.health);
+        s.playerHp = Math.min(pc.currentHp != null ? pc.currentHp : s.playerMaxHp, s.playerMaxHp);
+        s.monsterHp = s.monsterMaxHp;
+
+        s.playerAttackProgress = 0f;
+        s.monsterAttackProgress = 0f;
+        s.playerAttackInterval = 0f;
+        s.monsterAttackInterval = 0f;
+
         s.running = true;
-        s.playerAttackProgress = 0.0;
         state.setValue(s);
 
         pTimer = mTimer = 0;
@@ -75,97 +86,95 @@ public class CombatEngine {
         BattleState s = state.getValue();
         if (s != null) {
             s.running = false;
-            // persist current HP on stop
-            pc.currentHp = s.playerHp;
-            repo.save();
             state.setValue(s);
+            // persist player HP
+            if (pc != null) {
+                pc.currentHp = s.playerHp;
+                repo.save();
+            }
         }
     }
 
     private void loop() {
         BattleState s = state.getValue();
         if (s == null || !s.running) return;
-
-        // 60 Hz tick
-        handler.postDelayed(this::tick, 16);
+        handler.postDelayed(this::tick, 16); // ~60 Hz
     }
 
     private void tick() {
         BattleState s = state.getValue();
         if (s == null || !s.running) return;
 
-        double dt = 0.016; // 16 ms @ ~60Hz
+        double dt = 0.016; // 16 ms
+
+        // attack intervals (base 2.5s, minus speed bonuses)
+        pAtkItv = Math.max(0.6, 2.5 - pStats.speed * 2.5);
+        mAtkItv = Math.max(0.6, 2.5 - mStats.speed * 2.5);
 
         pTimer += dt;
         mTimer += dt;
 
-        // Player attacks
-        if (pTimer >= pAttackInterval && s.monsterHp > 0) {
+        // progress (0..1)
+        s.playerAttackProgress = (float) Math.min(1.0, pTimer / pAtkItv);
+        s.monsterAttackProgress = (float) Math.min(1.0, mTimer / mAtkItv);
+        s.playerAttackInterval = (float) pAtkItv;
+        s.monsterAttackInterval = (float) mAtkItv;
+
+        if (pTimer >= pAtkItv && s.monsterHp > 0) {
             pTimer = 0;
             int dmg = damageRoll(pStats.attack, mStats.defense, pStats.critChance, pStats.critMultiplier);
             s.monsterHp = Math.max(0, s.monsterHp - dmg);
+            s.playerAttackProgress = 0f;
         }
-
-        // Monster attacks
-        if (mTimer >= mAttackInterval && s.playerHp > 0) {
+        if (mTimer >= mAtkItv && s.playerHp > 0) {
             mTimer = 0;
             int dmg = damageRoll(mStats.attack, pStats.defense, mStats.critChance, mStats.critMultiplier);
             s.playerHp = Math.max(0, s.playerHp - dmg);
+            s.monsterAttackProgress = 0f;
         }
 
-        // publish player attack progress (0..1)
-        s.playerAttackProgress = Math.max(0.0, Math.min(1.0, pTimer / pAttackInterval));
-
-        // victory/defeat handling
+        // defeat/victory
         if (s.monsterHp == 0 || s.playerHp == 0) {
             s.running = false;
             if (s.monsterHp == 0) grantRewards(monster);
-            // persist current HP
-            pc.currentHp = s.playerHp;
+            if (pc != null) pc.currentHp = s.playerHp;
             repo.save();
             state.setValue(s);
             return;
         }
-
-        // keep current HP persisted during battle so process death doesn’t lose state
-        pc.currentHp = s.playerHp;
-        repo.save();
 
         state.setValue(s);
         loop();
     }
 
     private int damageRoll(int atk, int def, double critC, double critM) {
-        int base = Math.max(1, atk - (int) (def * 0.6));
-        int roll = (int) Math.round(base * (0.85 + rng.nextDouble() * 0.3)); // ±15%
+        int base = Math.max(1, atk - (int)(def * 0.6));
+        int roll = (int)Math.round(base * (0.85 + rng.nextDouble()*0.3)); // ±15%
         boolean crit = rng.nextDouble() < critC;
-        if (crit) roll = (int) Math.round(roll * Math.max(1.25, critM));
+        if (crit) roll = (int)Math.round(roll * Math.max(1.25, critM));
         return Math.max(1, roll);
     }
 
-    private void grantRewards(Monster m) {
-        // Character XP (you can swap to a skill XP system later)
-        pc.exp += m.exp;
-        while (pc.exp >= GameMath.reqExpChar(pc.level)) {
-            pc.exp -= GameMath.reqExpChar(pc.level);
-            pc.level += 1;
-            // small base stat bumps on character level
-            pc.base.health += 5;
-            pc.base.attack += 2;
-            pc.base.defense += 1;
-        }
+    private void grantRewards(PlayerCharacter pc, Monster m) {
+        // XP / gold
+        pc.exp += m.expReward;
+        pc.addItem("gold", m.goldReward);
 
-        // Drops
+        // --- DROPS ---
         for (Drop d : m.drops) {
             if (rng.nextDouble() <= d.chance) {
                 int qty = d.min + rng.nextInt(Math.max(1, d.max - d.min + 1));
-                pc.addItem(d.itemId, qty);
+                Item def = repo.getItem(d.itemId);
+                String name = def != null ? def.name : d.itemId;
+                repo.addPendingLoot(d.itemId, name, qty);
             }
         }
+
+        repo.save();
     }
 
-    private int clamp(Integer v, int min, int max) {
-        if (v == null) return min;
-        return Math.max(min, Math.min(max, v));
+
+    private int reqExp(int lvl) {
+        return 50 + (lvl * 25);
     }
 }

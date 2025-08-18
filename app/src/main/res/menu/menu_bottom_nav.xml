@@ -8,12 +8,12 @@
 
     <item
         android:id="@+id/nav_character"
-        android:icon="@drawable/ic_helmet"
+        android:icon="@drawable/ic_person"
         android:title="Character" />
 
     <item
         android:id="@+id/nav_inventory"
-        android:icon="@drawable/ic_backpack"
+        android:icon="@drawable/ic_bag"
         android:title="Inventory" />
 
     <!-- NEW -->
@@ -25,7 +25,7 @@
     <!-- NEW -->
     <item
         android:id="@+id/nav_settings"
-        android:icon="@drawable/ic_gear"
+        android:icon="@drawable/ic_settings"
         android:title="Settings" />
 
 </menu>

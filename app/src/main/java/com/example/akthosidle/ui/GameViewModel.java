@@ -12,8 +12,12 @@ import com.example.akthosidle.model.EquipmentSlot;
 import com.example.akthosidle.model.InventoryItem;
 import com.example.akthosidle.model.Item;
 import com.example.akthosidle.model.PlayerCharacter;
+import com.example.akthosidle.model.Skill;
+import com.example.akthosidle.model.SkillId;
 
 import java.util.List;
+import androidx.lifecycle.MutableLiveData;
+import java.util.ArrayList;
 
 /**
  * Central app state for Character/Inventory/Battle.
@@ -88,5 +92,32 @@ public class GameViewModel extends AndroidViewModel {
         CombatEngine.BattleState s = engine.state().getValue();
         if (s != null && s.running) engine.stop();
         else engine.start(monsterId);
+    }
+
+    // ---------- Skills ----------
+    /** XP needed for the next level. Keep this in sync with your game design. */
+    public int skillReqXp(int level) {
+        // Simple baseline curve; adjust as desired
+        return 50 + (level * 25);
+    }
+
+    /** Award XP to a skill and handle level-ups, then persist. */
+    public void addSkillXp(SkillId id, int amount) {
+        if (amount <= 0) return;
+        PlayerCharacter pc = player();
+        Skill s = pc.skill(id);
+        s.xp += amount;
+        while (s.xp >= skillReqXp(s.level)) {
+            s.xp -= skillReqXp(s.level);
+            s.level += 1;
+        }
+        repo.save();
+    }
+
+    // ---------- Loot (pending) ----------
+    public LiveData<List<InventoryItem>> pendingLoot() { return repo.pendingLootLive; }
+
+    public void collectLoot() {
+        repo.collectPendingLoot(player());
     }
 }

@@ -4,6 +4,7 @@ package com.example.akthosidle.model;
 public class Skill {
     public int level;
     public int exp;
+    public int xp;
 
     public Skill() {
         this(1, 0);

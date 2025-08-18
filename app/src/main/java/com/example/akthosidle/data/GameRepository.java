@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 import androidx.annotation.Nullable;
+import androidx.lifecycle.MutableLiveData;
 
 import com.example.akthosidle.model.Drop;
 import com.example.akthosidle.model.EquipmentSlot;
@@ -382,5 +383,80 @@ public class GameRepository {
         if (skill == null) return false;
         String k = skill.toUpperCase();
         return k.equals("ATTACK") || k.equals("STRENGTH") || k.equals("DEFENSE") || k.equals("HP");
+    }
+
+    // item definitions map is already in repo; ensure it’s visible:
+    public final Map<String, Item> items = new HashMap<>();
+
+    // pending loot live-data
+    public final MutableLiveData<List<InventoryItem>> pendingLootLive = new MutableLiveData<>(new ArrayList<>());
+
+    public void addPendingCurrency(String code, String name, int qty) {
+        PendingLoot pl = new PendingLoot();
+        pl.id = "currency:" + code; // e.g., currency:gold
+        pl.name = name;
+        pl.quantity = qty;
+        pl.isCurrency = true;
+        pendingLoot.add(pl);
+        save();
+    }
+
+    public java.util.List<PendingLoot> getPendingLoot() {
+        return new java.util.ArrayList<>(pendingLoot);
+    }
+
+    public void clearPendingLoot() {
+        pendingLoot.clear();
+        save();
+    }
+
+    /** Apply all pending loot to the save (items & currencies). */
+    public void collectPendingLoot() {
+        PlayerCharacter pc = loadOrCreatePlayer();
+        for (PendingLoot pl : pendingLoot) {
+            if (pl.isCurrency) {
+                if ("currency:gold".equals(pl.id)) {
+                    pc.gold += pl.quantity;
+                }
+                // Add other currencies here if you introduce them later.
+            } else {
+                pc.addItem(pl.id, pl.quantity);
+            }
+        }
+        pendingLoot.clear();
+        save();
+    }
+
+
+    public synchronized void collectPendingLoot(PlayerCharacter pc) {
+        List<InventoryItem> cur = new ArrayList<>(pendingLootLive.getValue());
+        for (InventoryItem it : cur) {
+            pc.addItem(it.id, it.quantity);
+        }
+        cur.clear();
+        pendingLootLive.postValue(cur);
+        save();
+    }
+
+
+    public long getGold() {
+        return loadOrCreatePlayer().gold;
+    }
+
+    public void addGold(long amount) {
+        PlayerCharacter pc = loadOrCreatePlayer();
+        pc.gold = Math.max(0, pc.gold + amount);
+        save();
+    }
+
+
+    private final java.util.List<PendingLoot> pendingLoot = new java.util.ArrayList<>();
+
+
+    public static class PendingLoot {
+        public String id;        // e.g. "iron_ore" OR "currency:gold"
+        public String name;      // display label, e.g. "Gold"
+        public int quantity;
+        public boolean isCurrency;
     }
 }
