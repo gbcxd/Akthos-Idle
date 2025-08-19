@@ -2,11 +2,13 @@ package com.example.akthosidle.data.repo;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.AssetManager;
 
 import androidx.annotation.Nullable;
 import androidx.lifecycle.MutableLiveData;
 
 import com.example.akthosidle.data.dtos.InventoryItem;
+import com.example.akthosidle.domain.model.Action;
 import com.example.akthosidle.domain.model.Drop;
 import com.example.akthosidle.domain.model.EquipmentSlot;
 import com.example.akthosidle.domain.model.Item;
@@ -17,7 +19,9 @@ import com.example.akthosidle.domain.model.Stats;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import java.io.InputStream;
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -29,6 +33,7 @@ public class GameRepository {
 
     private static final String SP_NAME = "akthos_idle_save";
     private static final String KEY_PLAYER = "player_json";
+    private static final String KEY_LAST_SEEN = "last_seen_ms";
 
     private final Context app;
     private final SharedPreferences sp;
@@ -38,10 +43,13 @@ public class GameRepository {
     public final Map<String, Item> items = new HashMap<>();
     private final Map<String, Monster> monsters = new HashMap<>();
 
+    // NEW: Actions (progression content)
+    private final Map<String, Action> actions = new HashMap<>();
+
     // Runtime save
     private PlayerCharacter player;
 
-    // ===== NEW: live currency balances for top bar =====
+    // Live currency balances for top bar
     public final MutableLiveData<Map<String, Long>> currencyLive =
             new MutableLiveData<>(new HashMap<>());
 
@@ -51,7 +59,7 @@ public class GameRepository {
     }
 
     /* =========================================================
-     * Load static definitions (items / monsters).
+     * Load static definitions (items / monsters / actions).
      * ========================================================= */
     public void loadDefinitions() {
         if (!items.isEmpty() || !monsters.isEmpty()) return;
@@ -121,11 +129,50 @@ public class GameRepository {
         thief.stats = new Stats(8, 4, 0.15, 40, 0.05, 1.5);
         thief.expReward = 20;
         thief.goldReward = 0;
-        thief.silverReward = 12;    // optional: soft currency
-        thief.slayerReward = 0;     // optional: slayer coins
+        thief.silverReward = 12;    // soft currency
+        thief.slayerReward = 0;     // slayer coins
         thief.drops = new ArrayList<>();
         thief.drops.add(new Drop("food_apple", 1, 3, 0.5));
         monsters.put(thief.id, thief);
+    }
+
+    /** Load Actions from assets; call once on startup (e.g., Application or first screen). */
+    public void loadActionsFromAssets() {
+        if (!actions.isEmpty()) return;
+        AssetManager am = app.getAssets();
+        try (InputStream is = am.open("game/actions.v1.json")) {
+            String json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            Type t = new TypeToken<List<Action>>() {}.getType();
+            List<Action> list = gson.fromJson(json, t);
+            if (list != null) {
+                for (Action a : list) {
+                    if (a != null && a.id != null) actions.put(a.id, a);
+                }
+            }
+        } catch (Exception e) {
+            // Fallback: a couple of hardcoded actions so UI can run without assets
+            Action mineCopper = new Action();
+            mineCopper.id = "mine_copper";
+            mineCopper.name = "Mine Copper";
+            mineCopper.skill = SkillId.MINING;
+            mineCopper.durationMs = 3000;
+            mineCopper.exp = 8;
+            mineCopper.outputs = new HashMap<>();
+            mineCopper.outputs.put("ore_copper", 1);
+            mineCopper.reqLevel = 1;
+            actions.put(mineCopper.id, mineCopper);
+
+            Action fishShrimp = new Action();
+            fishShrimp.id = "fish_shrimp";
+            fishShrimp.name = "Fish Shrimp";
+            fishShrimp.skill = SkillId.FISHING;
+            fishShrimp.durationMs = 3000;
+            fishShrimp.exp = 7;
+            fishShrimp.outputs = new HashMap<>();
+            fishShrimp.outputs.put("fish_shrimp", 1);
+            fishShrimp.reqLevel = 1;
+            actions.put(fishShrimp.id, fishShrimp);
+        }
     }
 
     /* ============================
@@ -143,22 +190,19 @@ public class GameRepository {
             if (player.equipment == null) player.equipment = new EnumMap<>(EquipmentSlot.class);
             if (player.skills == null) player.skills = new EnumMap<>(SkillId.class);
             if (player.currencies == null) player.currencies = new HashMap<>();
-            // Mirror legacy gold into currencies map (compat)
             player.normalizeCurrencies();
-            // Initialize currentHp if missing
             if (player.currentHp == null) {
                 int maxHp = totalStats().health;
                 player.currentHp = maxHp;
                 save();
             }
-            // NEW: publish balances to top bar
             publishCurrencies();
             return player;
         }
 
         // Create new player
         player = new PlayerCharacter();
-        player.normalizeCurrencies(); // ensure "gold" exists in currencies map
+        player.normalizeCurrencies();
 
         // Starter inventory
         addToBag("wpn_rusty_sword", 1);
@@ -175,7 +219,7 @@ public class GameRepository {
         }
 
         save();
-        publishCurrencies(); // NEW
+        publishCurrencies();
         return player;
     }
 
@@ -189,6 +233,21 @@ public class GameRepository {
      * ============================ */
     public @Nullable Item getItem(String id) { return items.get(id); }
     public @Nullable Monster getMonster(String id) { return monsters.get(id); }
+    public @Nullable Action getAction(String id) { return actions.get(id); }
+
+    /** Filter actions by skill for the Skill Detail screen. */
+    public List<Action> getActionsBySkill(SkillId skill) {
+        List<Action> out = new ArrayList<>();
+        for (Action a : actions.values()) {
+            if (a != null && a.skill == skill) out.add(a);
+        }
+        return out;
+    }
+
+    public String itemName(String id) {
+        Item it = getItem(id);
+        return it != null && it.name != null ? it.name : id;
+    }
 
     public @Nullable EquipmentSlot slotOf(Item it) {
         if (it == null || it.slot == null) return null;
@@ -276,7 +335,6 @@ public class GameRepository {
         return list;
     }
 
-    /** Consume a potion (not food). Currently applies simple immediate effects and decrements qty. */
     public void consumePotion(String potionId) {
         PlayerCharacter pc = loadOrCreatePlayer();
         Integer have = pc.bag.get(potionId);
@@ -285,21 +343,18 @@ public class GameRepository {
         Item it = getItem(potionId);
         if (it == null || !isPotion(it)) return;
 
-        // Minimal immediate effects: if potion has heal, treat as instant heal.
         if (it.heal != null && it.heal > 0) {
             int maxHp = totalStats().health;
             int cur = pc.currentHp == null ? maxHp : pc.currentHp;
             pc.currentHp = Math.min(maxHp, Math.max(0, cur) + it.heal);
         }
 
-        // Decrement inventory
         pc.bag.put(potionId, have - 1);
         if (pc.bag.get(potionId) != null && pc.bag.get(potionId) <= 0) pc.bag.remove(potionId);
 
         save();
     }
 
-    /** “Syrup” action: find a consumable with 'syrup' in id/name and heal or apply a tiny speed bonus. */
     public void consumeSyrup() {
         PlayerCharacter pc = loadOrCreatePlayer();
         String syrupId = null;
@@ -321,8 +376,7 @@ public class GameRepository {
             int cur = pc.currentHp == null ? maxHp : pc.currentHp;
             pc.currentHp = Math.min(maxHp, Math.max(0, cur) + syrup.heal);
         } else {
-            // tiny permanent speed nudge as placeholder (until you add timed buffs)
-            pc.base.speed += 0.05;
+            pc.base.speed += 0.05; // placeholder buff
         }
 
         Integer have = pc.bag.get(syrupId);
@@ -402,7 +456,6 @@ public class GameRepository {
     public final MutableLiveData<List<InventoryItem>> pendingLootLive =
             new MutableLiveData<>(new ArrayList<>());
 
-    /** Add currency to pending buffer (e.g., silver, gold, slayer). */
     public void addPendingCurrency(String code, String name, int qty) {
         if (qty <= 0) return;
         String id = "currency:" + code; // e.g., currency:silver
@@ -411,7 +464,7 @@ public class GameRepository {
                 pl.quantity += qty;
                 updatePendingLootLive();
                 save();
-                publishCurrencies(); // NEW
+                publishCurrencies();
                 return;
             }
         }
@@ -423,10 +476,9 @@ public class GameRepository {
         pendingLoot.add(pl);
         updatePendingLootLive();
         save();
-        publishCurrencies(); // NEW
+        publishCurrencies();
     }
 
-    /** REQUIRED by CombatEngine: add an item stack to pending loot. */
     public void addPendingLoot(String itemId, String name, int qty) {
         if (itemId == null || qty <= 0) return;
         for (PendingLoot pl : pendingLoot) {
@@ -447,7 +499,6 @@ public class GameRepository {
         save();
     }
 
-    /** Helper to mirror internal buffer into LiveData list for UI. */
     private void updatePendingLootLive() {
         List<InventoryItem> view = new ArrayList<>();
         for (PendingLoot pl : pendingLoot) {
@@ -458,7 +509,6 @@ public class GameRepository {
         pendingLootLive.postValue(view);
     }
 
-    /** Snapshot of entire pending buffer (items + currencies). */
     public List<PendingLoot> getPendingLoot() {
         return new ArrayList<>(pendingLoot);
     }
@@ -467,15 +517,13 @@ public class GameRepository {
         pendingLoot.clear();
         updatePendingLootLive();
         save();
-        publishCurrencies(); // NEW (in case currencies were pending)
+        publishCurrencies();
     }
 
-    /** Apply all pending loot to the save (items & currencies). */
     public void collectPendingLoot() {
         PlayerCharacter pc = loadOrCreatePlayer();
         for (PendingLoot pl : pendingLoot) {
             if (pl.isCurrency) {
-                // id looks like "currency:silver" -> extract "silver"
                 String code = (pl.id != null && pl.id.startsWith("currency:"))
                         ? pl.id.substring("currency:".length()) : pl.id;
                 pc.addCurrency(code, pl.quantity);
@@ -486,25 +534,22 @@ public class GameRepository {
         pendingLoot.clear();
         updatePendingLootLive();
         save();
-        publishCurrencies(); // NEW
+        publishCurrencies();
     }
 
-    /** Variant that takes an explicit player (kept for compatibility). */
     public synchronized void collectPendingLoot(PlayerCharacter pc) {
-        // Move from LiveData view into the character (items only)
         List<InventoryItem> cur = new ArrayList<>(pendingLootLive.getValue());
         for (InventoryItem it : cur) {
             pc.addItem(it.id, it.quantity);
         }
-        // Also clear internal buffer of items to avoid dupes
         pendingLoot.removeIf(pl -> !pl.isCurrency);
         updatePendingLootLive();
         save();
-        publishCurrencies(); // NEW (in case currencies were in buffer separately)
+        publishCurrencies();
     }
 
     /* ============================
-     * Currency convenience API (generic + legacy gold)
+     * Currency convenience API
      * ============================ */
     public long getCurrency(String id) {
         return loadOrCreatePlayer().getCurrency(id);
@@ -514,7 +559,7 @@ public class GameRepository {
         PlayerCharacter pc = loadOrCreatePlayer();
         pc.addCurrency(id, amount);
         save();
-        publishCurrencies(); // NEW
+        publishCurrencies();
     }
 
     public boolean spendCurrency(String id, long amount) {
@@ -522,7 +567,7 @@ public class GameRepository {
         boolean ok = pc.spendCurrency(id, amount);
         if (ok) {
             save();
-            publishCurrencies(); // NEW
+            publishCurrencies();
         }
         return ok;
     }
@@ -531,28 +576,31 @@ public class GameRepository {
         PlayerCharacter pc = loadOrCreatePlayer();
         List<InventoryItem> out = new ArrayList<>();
         for (Map.Entry<String, Long> e : pc.currencies.entrySet()) {
-            out.add(new InventoryItem(e.getKey(), capitalize(e.getKey()), (int)Math.min(Integer.MAX_VALUE, e.getValue())));
+            out.add(new InventoryItem(e.getKey(), capitalize(e.getKey()),
+                    (int) Math.min(Integer.MAX_VALUE, e.getValue())));
         }
         return out;
     }
 
-    public long getGold() {
-        return getCurrency("gold");
-    }
+    public long getGold() { return getCurrency("gold"); }
+    public void addGold(long amount) { addCurrency("gold", amount); }
 
-    public void addGold(long amount) {
-        addCurrency("gold", amount);
-    }
-
-    // ===== NEW: publish balances to observers (MainActivity toolbar, etc.) =====
     private void publishCurrencies() {
         PlayerCharacter pc = loadOrCreatePlayer();
         currencyLive.postValue(new HashMap<>(pc.currencies));
     }
 
-    // Optional getter
     public MutableLiveData<Map<String, Long>> currenciesLive() { return currencyLive; }
 
+    /* ============================
+     * Offline progress timestamps
+     * ============================ */
+    public void setLastSeen(long ms) { sp.edit().putLong(KEY_LAST_SEEN, ms).apply(); }
+    public long getLastSeen() { return sp.getLong(KEY_LAST_SEEN, System.currentTimeMillis()); }
+
+    /* ============================
+     * Utils
+     * ============================ */
     private static String capitalize(String s) {
         if (s == null || s.isEmpty()) return s;
         return Character.toUpperCase(s.charAt(0)) + s.substring(1);

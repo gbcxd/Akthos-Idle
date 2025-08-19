@@ -6,6 +6,11 @@ public enum SkillId {
     ATTACK,
     STRENGTH,
     DEFENSE,
+
+    ARCHERY,
+
+    MAGIC,
+
     HP,
 
     // Non-Combat
@@ -22,5 +27,5 @@ public enum SkillId {
     CARPENTRY,
     ENCHANTING,
     COMMUNITY,
-    HARVESTING
+    HARVESTING,
 }

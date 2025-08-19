@@ -6,13 +6,19 @@ public class Skill {
     public int exp;
     public int xp;
 
-    public Skill() {
-        this(1, 0);
-    }
+    public class Skill {
+        public int level = 1;
+        public int exp = 0;
 
-    public Skill(int level, int exp) {
-        this.level = level;
-        this.exp = exp;
+        public int reqExp(int lvl) { // smooth curve, tweak later
+            return 30 + (int)Math.round(25 * Math.pow(lvl, 1.35));
+        }
+        public boolean addExp(int x) {
+            exp += x;
+            boolean leveled = false;
+            while (exp >= reqExp(level)) { exp -= reqExp(level); level++; leveled = true; }
+            return leveled;
+        }
     }
 
     /** Optional helper to add XP and handle simple level-ups. */
