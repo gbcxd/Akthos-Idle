@@ -12,9 +12,12 @@ public class PlayerCharacter {
     public int level = 1;
     public int exp = 0;
 
-    // ---- Currency ----
-    /** Main currency. Keep as a simple counter, not an inventory item. */
+    // ---- Currency (legacy + new) ----
+    /** Legacy main currency (kept for compatibility). */
     public long gold = 0;
+
+    /** New: flexible currency balances (e.g., silver, gold, slayer, etc.) */
+    public Map<String, Long> currencies = new HashMap<>(); // id -> balance
 
     // ---- Base stats (augmented by gear & buffs) ----
     /** attack, defense, speed(+), health, critChance, critMultiplier */
@@ -52,6 +55,44 @@ public class PlayerCharacter {
         if (qty == 0) return;
         int now = bag.getOrDefault(itemId, 0) + qty;
         if (now <= 0) bag.remove(itemId); else bag.put(itemId, now);
+    }
+
+    // ---------- Currency helpers (new) ----------
+    /** Get balance for a currency id (e.g., "silver", "gold", "slayer"). */
+    public long getCurrency(String id) {
+        if (id == null) return 0L;
+        if ("gold".equals(id)) return Math.max(gold, currencies.getOrDefault("gold", 0L)); // legacy compat
+        return currencies.getOrDefault(id, 0L);
+    }
+
+    /** Add (or subtract) an amount to a currency (amount can be negative). */
+    public void addCurrency(String id, long amount) {
+        if (id == null || amount == 0) return;
+        if ("gold".equals(id)) {
+            gold = Math.max(0L, gold + amount); // keep legacy in sync
+            currencies.put("gold", gold);
+            return;
+        }
+        long cur = currencies.getOrDefault(id, 0L);
+        long next = cur + amount;
+        currencies.put(id, Math.max(0L, next));
+    }
+
+    /** Spend returns true if sufficient balance; does nothing and returns false otherwise. */
+    public boolean spendCurrency(String id, long amount) {
+        if (id == null || amount <= 0) return true;
+        long cur = getCurrency(id);
+        if (cur < amount) return false;
+        addCurrency(id, -amount);
+        return true;
+    }
+
+    /** Optional: one-time call after load to mirror legacy gold into the map. */
+    public void normalizeCurrencies() {
+        long mappedGold = currencies.getOrDefault("gold", 0L);
+        if (mappedGold != gold) {
+            currencies.put("gold", gold);
+        }
     }
 
     // ---------- Quick Food ----------

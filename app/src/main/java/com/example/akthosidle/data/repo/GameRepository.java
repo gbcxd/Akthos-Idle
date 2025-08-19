@@ -6,9 +6,9 @@ import android.content.SharedPreferences;
 import androidx.annotation.Nullable;
 import androidx.lifecycle.MutableLiveData;
 
+import com.example.akthosidle.data.dtos.InventoryItem;
 import com.example.akthosidle.domain.model.Drop;
 import com.example.akthosidle.domain.model.EquipmentSlot;
-import com.example.akthosidle.data.dtos.InventoryItem;
 import com.example.akthosidle.domain.model.Item;
 import com.example.akthosidle.domain.model.Monster;
 import com.example.akthosidle.domain.model.PlayerCharacter;
@@ -52,14 +52,13 @@ public class GameRepository {
     public void loadDefinitions() {
         if (!items.isEmpty() || !monsters.isEmpty()) return;
 
-        // ---------- Items (using your Item.java shape) ----------
-        // Equipment
+        // ---------- Items ----------
         Item rustySword = new Item();
         rustySword.id = "wpn_rusty_sword";
         rustySword.name = "Rusty Sword";
         rustySword.icon = "ic_sword";
         rustySword.type = "EQUIPMENT";
-        rustySword.slot = "WEAPON"; // must match EquipmentSlot enum name
+        rustySword.slot = "WEAPON";
         rustySword.rarity = "COMMON";
         rustySword.stats = new Stats(3, 0, 0.0, 0, 0.0, 0.0);
         items.put(rustySword.id, rustySword);
@@ -74,7 +73,6 @@ public class GameRepository {
         leatherCap.stats = new Stats(0, 1, 0.0, 5, 0.0, 0.0);
         items.put(leatherCap.id, leatherCap);
 
-        // Food (CONSUMABLE + heal)
         Item apple = new Item();
         apple.id = "food_apple";
         apple.name = "Apple";
@@ -84,17 +82,15 @@ public class GameRepository {
         apple.heal = 10;
         items.put(apple.id, apple);
 
-        // Basic “combat” potion (consumable that affects combat via stats)
         Item warDraught = new Item();
         warDraught.id = "pot_basic_combat";
         warDraught.name = "War Draught";
         warDraught.icon = "ic_potion_red";
         warDraught.type = "CONSUMABLE";
         warDraught.rarity = "UNCOMMON";
-        warDraught.stats = new Stats(2, 0, 0.0, 0, 0.05, 0.0); // +ATK, +CritChance
+        warDraught.stats = new Stats(2, 0, 0.0, 0, 0.05, 0.0);
         items.put(warDraught.id, warDraught);
 
-        // Basic “non-combat” potion (consumable that buffs gathering skill)
         Item focusTonic = new Item();
         focusTonic.id = "pot_basic_noncombat";
         focusTonic.name = "Focus Tonic";
@@ -102,10 +98,9 @@ public class GameRepository {
         focusTonic.type = "CONSUMABLE";
         focusTonic.rarity = "UNCOMMON";
         focusTonic.skillBuffs = new HashMap<>();
-        focusTonic.skillBuffs.put("MINING", 5); // example
+        focusTonic.skillBuffs.put("MINING", 5);
         items.put(focusTonic.id, focusTonic);
 
-        // “Syrup” special consumable
         Item syrup = new Item();
         syrup.id = "syrup_basic";
         syrup.name = "Syrup";
@@ -120,9 +115,10 @@ public class GameRepository {
         thief.id = "shadow_thief";
         thief.name = "Shadow Thief";
         thief.stats = new Stats(8, 4, 0.15, 40, 0.05, 1.5);
-        // Ensure your Monster has fields expReward & goldReward (if not, add them in Monster class)
         thief.expReward = 20;
         thief.goldReward = 0;
+        thief.silverReward = 12;    // optional: soft currency
+        thief.slayerReward = 0;     // optional: slayer coins
         thief.drops = new ArrayList<>();
         thief.drops.add(new Drop("food_apple", 1, 3, 0.5));
         monsters.put(thief.id, thief);
@@ -142,9 +138,12 @@ public class GameRepository {
             if (player.bag == null) player.bag = new HashMap<>();
             if (player.equipment == null) player.equipment = new EnumMap<>(EquipmentSlot.class);
             if (player.skills == null) player.skills = new EnumMap<>(SkillId.class);
+            if (player.currencies == null) player.currencies = new HashMap<>();
+            // Mirror legacy gold into currencies map (compat)
+            player.normalizeCurrencies();
             // Initialize currentHp if missing
             if (player.currentHp == null) {
-                int maxHp = totalStats().health; // base + gear
+                int maxHp = totalStats().health;
                 player.currentHp = maxHp;
                 save();
             }
@@ -153,6 +152,7 @@ public class GameRepository {
 
         // Create new player
         player = new PlayerCharacter();
+        player.normalizeCurrencies(); // ensure "gold" exists in currencies map
 
         // Starter inventory
         addToBag("wpn_rusty_sword", 1);
@@ -164,7 +164,7 @@ public class GameRepository {
 
         // First-time HP init to max
         if (player.currentHp == null) {
-            int maxHp = totalStats().health; // base only for brand new char
+            int maxHp = totalStats().health;
             player.currentHp = maxHp;
         }
 
@@ -352,13 +352,12 @@ public class GameRepository {
     private boolean isPotion(@Nullable Item it) {
         return it != null
                 && "CONSUMABLE".equals(it.type)
-                && !isFood(it); // i.e., any consumable that isn't food
+                && !isFood(it);
     }
 
-    /** Detects if a potion has combat impact. */
     private boolean isCombatPotion(Item it) {
         if (it == null) return false;
-        if (it.stats != null) return true; // direct combat stats
+        if (it.stats != null) return true;
         if (it.skillBuffs != null) {
             for (String key : it.skillBuffs.keySet()) {
                 if (isCombatSkill(key)) return true;
@@ -367,17 +366,15 @@ public class GameRepository {
         return false;
     }
 
-    /** Detects if a potion buffs non-combat skills only. */
     private boolean isNonCombatPotion(Item it) {
         if (it == null) return false;
         boolean hasAny = false;
         if (it.skillBuffs != null) {
             for (String key : it.skillBuffs.keySet()) {
                 hasAny = true;
-                if (isCombatSkill(key)) return false; // contains combat skill -> not purely non-combat
+                if (isCombatSkill(key)) return false;
             }
         }
-        // If it has skill buffs and none are combat -> non-combat
         return hasAny;
     }
 
@@ -398,10 +395,10 @@ public class GameRepository {
     public final MutableLiveData<List<InventoryItem>> pendingLootLive =
             new MutableLiveData<>(new ArrayList<>());
 
-    /** Add currency to pending buffer (e.g., gold). */
+    /** Add currency to pending buffer (e.g., silver, gold, slayer). */
     public void addPendingCurrency(String code, String name, int qty) {
         if (qty <= 0) return;
-        String id = "currency:" + code; // e.g., currency:gold
+        String id = "currency:" + code; // e.g., currency:silver
         for (PendingLoot pl : pendingLoot) {
             if (pl.isCurrency && id.equals(pl.id)) {
                 pl.quantity += qty;
@@ -412,7 +409,7 @@ public class GameRepository {
         }
         PendingLoot pl = new PendingLoot();
         pl.id = id;
-        pl.name = name;
+        pl.name = name != null ? name : code;
         pl.quantity = qty;
         pl.isCurrency = true;
         pendingLoot.add(pl);
@@ -468,10 +465,10 @@ public class GameRepository {
         PlayerCharacter pc = loadOrCreatePlayer();
         for (PendingLoot pl : pendingLoot) {
             if (pl.isCurrency) {
-                if ("currency:gold".equals(pl.id)) {
-                    pc.gold += pl.quantity;
-                }
-                // Add other currencies here if you introduce them later.
+                // id looks like "currency:silver" -> extract "silver"
+                String code = (pl.id != null && pl.id.startsWith("currency:"))
+                        ? pl.id.substring("currency:".length()) : pl.id;
+                pc.addCurrency(code, pl.quantity);
             } else {
                 pc.addItem(pl.id, pl.quantity);
             }
@@ -488,25 +485,57 @@ public class GameRepository {
         for (InventoryItem it : cur) {
             pc.addItem(it.id, it.quantity);
         }
-        // Also clear internal buffer to avoid dupes
+        // Also clear internal buffer of items to avoid dupes
         pendingLoot.removeIf(pl -> !pl.isCurrency);
         updatePendingLootLive();
         save();
     }
 
-    public long getGold() {
-        return loadOrCreatePlayer().gold;
+    /* ============================
+     * Currency convenience API (generic + legacy gold)
+     * ============================ */
+    public long getCurrency(String id) {
+        return loadOrCreatePlayer().getCurrency(id);
     }
 
-    public void addGold(long amount) {
+    public void addCurrency(String id, long amount) {
         PlayerCharacter pc = loadOrCreatePlayer();
-        pc.gold = Math.max(0, pc.gold + amount);
+        pc.addCurrency(id, amount);
         save();
     }
 
+    public boolean spendCurrency(String id, long amount) {
+        PlayerCharacter pc = loadOrCreatePlayer();
+        boolean ok = pc.spendCurrency(id, amount);
+        if (ok) save();
+        return ok;
+    }
+
+    public List<InventoryItem> listCurrencies() {
+        PlayerCharacter pc = loadOrCreatePlayer();
+        List<InventoryItem> out = new ArrayList<>();
+        for (Map.Entry<String, Long> e : pc.currencies.entrySet()) {
+            out.add(new InventoryItem(e.getKey(), capitalize(e.getKey()), (int)Math.min(Integer.MAX_VALUE, e.getValue())));
+        }
+        return out;
+    }
+
+    public long getGold() {
+        return getCurrency("gold");
+    }
+
+    public void addGold(long amount) {
+        addCurrency("gold", amount);
+    }
+
+    private static String capitalize(String s) {
+        if (s == null || s.isEmpty()) return s;
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
     public static class PendingLoot {
-        public String id;        // e.g. "iron_ore" OR "currency:gold"
-        public String name;      // display label, e.g. "Gold"
+        public String id;        // e.g. "iron_ore" OR "currency:silver"
+        public String name;      // display label, e.g. "Silver"
         public int quantity;
         public boolean isCurrency;
     }

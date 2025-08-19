@@ -6,11 +6,14 @@ public class Monster {
     public String id;
     public String name;
     public Stats stats;
+
     public List<Drop> drops;
 
     // NEW: rewards used by CombatEngine.grantRewards(...)
-    public int expReward;   // total XP granted to player
-    public int goldReward;  // amount of "gold" item to add
+    public int expReward;
+    public int silverReward;
+    public int goldReward;    // keep for IAP-less test drops if you want
+    public int slayerReward;  // amount of "gold" item to add
     public int exp;
 
     public Monster() {}

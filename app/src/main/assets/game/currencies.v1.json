@@ -1,0 +1,7 @@
+[
+  { "id": "silver",        "name": "Silver",         "icon": "ic_silver",        "premium": false },
+  { "id": "gold",          "name": "Gold",           "icon": "ic_gold",          "premium": true  },
+  { "id": "slayer",        "name": "Slayer Coins",   "icon": "ic_slayer",        "premium": false },
+  { "id": "craft_marks",   "name": "Crafting Marks", "icon": "ic_craft",         "premium": false },
+  { "id": "ascension",     "name": "Ascension Cryst","icon": "ic_ascension",     "premium": false }
+]
