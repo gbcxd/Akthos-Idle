@@ -54,6 +54,9 @@ public class GameRepository {
     public final MutableLiveData<Map<String, Long>> currencyLive =
             new MutableLiveData<>(new HashMap<>());
 
+    // Live HP for UI (e.g., health bar / label)
+    public final MutableLiveData<Integer> playerHpLive = new MutableLiveData<>();
+
     public GameRepository(Context appContext) {
         this.app = appContext.getApplicationContext();
         this.sp = app.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
@@ -123,6 +126,15 @@ public class GameRepository {
         syrup.heal = 20;
         items.put(syrup.id, syrup);
 
+        Item smallHeal = new Item();
+        smallHeal.id = "pot_heal_small";
+        smallHeal.name = "Lesser Healing Potion";
+        smallHeal.icon = "ic_potion_green";
+        smallHeal.type = "CONSUMABLE";
+        smallHeal.rarity = "COMMON";
+        smallHeal.heal = 500; // heals 30 HP
+        items.put(smallHeal.id, smallHeal);
+
         // ---------- Monsters ----------
         Monster thief = new Monster();
         thief.id = "shadow_thief";
@@ -142,7 +154,7 @@ public class GameRepository {
         if (!actions.isEmpty()) return;
         AssetManager am = app.getAssets();
         try (InputStream is = am.open("game/actions.v1.json")) {
-            String json = readStream(is); // ✅ API 24+ compatible
+            String json = readStream(is); // API 24+ compatible
             Type t = new TypeToken<List<Action>>() {}.getType();
             List<Action> list = gson.fromJson(json, t);
             if (list != null) {
@@ -198,6 +210,7 @@ public class GameRepository {
                 save();
             }
             publishCurrencies();
+            publishHp(); // NEW: update HP observers
             return player;
         }
 
@@ -208,10 +221,11 @@ public class GameRepository {
         // Starter inventory
         addToBag("wpn_rusty_sword", 1);
         addToBag("helm_leather_cap", 1);
-        addToBag("food_apple", 5);
+        addToBag("food_apple", 1000);
         addToBag("pot_basic_combat", 2);
         addToBag("pot_basic_noncombat", 2);
-        addToBag("syrup_basic", 1);
+        addToBag("syrup_basic", 1000);
+        addToBag("pot_heal_small", 1000);
 
         // First-time HP init to max
         if (player.currentHp == null) {
@@ -221,6 +235,7 @@ public class GameRepository {
 
         save();
         publishCurrencies();
+        publishHp(); // NEW
         return player;
     }
 
@@ -333,6 +348,7 @@ public class GameRepository {
         return list;
     }
 
+    /** Consume a potion. Heals immediately if it has a heal value, then decrements quantity. */
     public void consumePotion(String potionId) {
         PlayerCharacter pc = loadOrCreatePlayer();
         Integer have = pc.bag.get(potionId);
@@ -344,45 +360,71 @@ public class GameRepository {
         if (it.heal != null && it.heal > 0) {
             int maxHp = totalStats().health;
             int cur = pc.currentHp == null ? maxHp : pc.currentHp;
-            pc.currentHp = Math.min(maxHp, Math.max(0, cur) + it.heal);
+            int newHp = Math.min(maxHp, Math.max(0, cur) + it.heal);
+            int healed = newHp - cur;
+            pc.currentHp = newHp;
+
+            if (healed > 0) {
+                toast("+" + healed + " HP");
+            } else {
+                toast("HP already full");
+            }
         }
 
+        // Decrement inventory
         pc.bag.put(potionId, have - 1);
         if (pc.bag.get(potionId) != null && pc.bag.get(potionId) <= 0) pc.bag.remove(potionId);
 
         save();
+        publishHp(); // notify UI about HP change
     }
 
+    /** Consume "syrup": heal if it has a heal value, otherwise apply a small speed buff. */
     public void consumeSyrup() {
         PlayerCharacter pc = loadOrCreatePlayer();
+
+        // find first syrup-like consumable in the bag
         String syrupId = null;
         for (String id : new HashSet<>(pc.bag.keySet())) {
             Item it = getItem(id);
             if (it != null && "CONSUMABLE".equals(it.type)) {
-                if ((it.id != null && it.id.toLowerCase().contains("syrup")) ||
-                        (it.name != null && it.name.toLowerCase().contains("syrup"))) {
-                    syrupId = id;
-                    break;
+                String nid = it.id != null ? it.id.toLowerCase() : "";
+                String nname = it.name != null ? it.name.toLowerCase() : "";
+                if (nid.contains("syrup") || nname.contains("syrup")) {
+                    syrupId = id; break;
                 }
             }
         }
         if (syrupId == null) return;
 
         Item syrup = getItem(syrupId);
+        boolean didSomething = false;
+
         if (syrup != null && syrup.heal != null && syrup.heal > 0) {
             int maxHp = totalStats().health;
             int cur = pc.currentHp == null ? maxHp : pc.currentHp;
-            pc.currentHp = Math.min(maxHp, Math.max(0, cur) + syrup.heal);
+            int newHp = Math.min(maxHp, Math.max(0, cur) + syrup.heal);
+            int healed = newHp - cur;
+            pc.currentHp = newHp;
+            didSomething = true;
+            toast(healed > 0 ? ("+" + healed + " HP") : "HP already full");
         } else {
-            pc.base.speed += 0.05; // placeholder buff
+            // fallback effect until timed buffs are implemented
+            pc.base.speed += 0.05;
+            didSomething = true;
+            toast("Speed +0.05");
         }
 
-        Integer have = pc.bag.get(syrupId);
-        if (have != null) {
-            pc.bag.put(syrupId, have - 1);
-            if (pc.bag.get(syrupId) != null && pc.bag.get(syrupId) <= 0) pc.bag.remove(syrupId);
+        // decrement inventory only if we used/applied it
+        if (didSomething) {
+            Integer have = pc.bag.get(syrupId);
+            if (have != null) {
+                pc.bag.put(syrupId, have - 1);
+                if (pc.bag.get(syrupId) != null && pc.bag.get(syrupId) <= 0) pc.bag.remove(syrupId);
+            }
+            save();
+            publishHp(); // notify UI in case HP changed
         }
-        save();
     }
 
     /* ============================
@@ -583,9 +625,16 @@ public class GameRepository {
     public long getGold() { return getCurrency("gold"); }
     public void addGold(long amount) { addCurrency("gold", amount); }
 
+    // Publish balances to observers (MainActivity toolbar, etc.)
     private void publishCurrencies() {
         PlayerCharacter pc = loadOrCreatePlayer();
         currencyLive.postValue(new HashMap<>(pc.currencies));
+    }
+
+    // Publish HP to observers
+    private void publishHp() {
+        PlayerCharacter pc = loadOrCreatePlayer();
+        playerHpLive.postValue(pc.currentHp);
     }
 
     public MutableLiveData<Map<String, Long>> currenciesLive() { return currencyLive; }

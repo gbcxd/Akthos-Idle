@@ -98,4 +98,13 @@ public class PlayerCharacter {
     // ---------- Quick Food ----------
     public String getQuickFoodId() { return quickFoodId; }
     public void setQuickFoodId(String quickFoodId) { this.quickFoodId = quickFoodId; }
+
+    public int heal(int amount, int maxHp) {
+        if (amount <= 0) return 0;
+        int cur = currentHp == null ? maxHp : currentHp;
+        int newHp = Math.min(maxHp, Math.max(0, cur) + amount);
+        int healed = newHp - cur;
+        currentHp = newHp;
+        return healed;
+    }
 }
