@@ -40,6 +40,15 @@ public class MainActivity extends AppCompatActivity {
         // Hook the Toolbar as the Activity's ActionBar
         setSupportActionBar(b.toolbar);
 
+        View btnAddGold = b.toolbar.findViewById(R.id.btn_add_gold);
+        if (btnAddGold != null) {
+            btnAddGold.setOnClickListener(v -> {
+                if (navController != null) {
+                    navController.navigate(R.id.buyGoldFragment); // ← nav destination we’ll add
+                }
+            });
+        }
+
         // ===== Bind currency strip views inside the toolbar =====
         tvSilver = b.toolbar.findViewById(R.id.amount_silver);
         tvGold   = b.toolbar.findViewById(R.id.amount_gold);
