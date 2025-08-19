@@ -10,8 +10,8 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.akthosidle.R;
-import com.example.akthosidle.model.InventoryItem;
-import com.example.akthosidle.model.Item;
+import com.example.akthosidle.data.dtos.InventoryItem;
+import com.example.akthosidle.domain.model.Item;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -1,4 +1,4 @@
-package com.example.akthosidle.model;
+package com.example.akthosidle.domain.model;
 
 /** All skills (combat + non-combat). */
 public enum SkillId {

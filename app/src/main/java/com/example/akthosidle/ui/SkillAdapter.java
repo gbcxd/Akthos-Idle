@@ -8,7 +8,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.akthosidle.R;
 import com.example.akthosidle.databinding.RowSkillBinding;
-import com.example.akthosidle.model.SkillId;
+import com.example.akthosidle.domain.model.SkillId;
 
 import java.util.ArrayList;
 import java.util.List;

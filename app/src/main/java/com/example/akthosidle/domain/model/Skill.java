@@ -1,4 +1,4 @@
-package com.example.akthosidle.model;
+package com.example.akthosidle.domain.model;
 
 /** Simple skill record: level + experience. */
 public class Skill {

@@ -1,4 +1,4 @@
-package com.example.akthosidle.model;
+package com.example.akthosidle.domain.model;
 
 import java.util.Map;
 

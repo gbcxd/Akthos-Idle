@@ -6,18 +6,16 @@ import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 
-import com.example.akthosidle.battle.CombatEngine;
-import com.example.akthosidle.data.GameRepository;
-import com.example.akthosidle.model.EquipmentSlot;
-import com.example.akthosidle.model.InventoryItem;
-import com.example.akthosidle.model.Item;
-import com.example.akthosidle.model.PlayerCharacter;
-import com.example.akthosidle.model.Skill;
-import com.example.akthosidle.model.SkillId;
+import com.example.akthosidle.domain.services.CombatEngine;
+import com.example.akthosidle.data.repo.GameRepository;
+import com.example.akthosidle.domain.model.EquipmentSlot;
+import com.example.akthosidle.data.dtos.InventoryItem;
+import com.example.akthosidle.domain.model.Item;
+import com.example.akthosidle.domain.model.PlayerCharacter;
+import com.example.akthosidle.domain.model.Skill;
+import com.example.akthosidle.domain.model.SkillId;
 
 import java.util.List;
-import androidx.lifecycle.MutableLiveData;
-import java.util.ArrayList;
 
 /**
  * Central app state for Character/Inventory/Battle.

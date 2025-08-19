@@ -13,8 +13,8 @@ import androidx.recyclerview.widget.DividerItemDecoration;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.example.akthosidle.databinding.FragmentSkillsBinding;
-import com.example.akthosidle.model.Skill;
-import com.example.akthosidle.model.SkillId;
+import com.example.akthosidle.domain.model.Skill;
+import com.example.akthosidle.domain.model.SkillId;
 
 import java.util.ArrayList;
 import java.util.List;

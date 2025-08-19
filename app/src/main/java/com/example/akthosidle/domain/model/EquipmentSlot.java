@@ -1,4 +1,4 @@
-package com.example.akthosidle.model;
+package com.example.akthosidle.domain.model;
 
 /** Equipment slot identifiers used by PlayerCharacter.equipment and Item.slot. */
 public enum EquipmentSlot {

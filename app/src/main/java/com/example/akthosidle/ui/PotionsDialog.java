@@ -17,7 +17,7 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.akthosidle.R;
-import com.example.akthosidle.model.InventoryItem;
+import com.example.akthosidle.data.dtos.InventoryItem;
 
 import java.util.ArrayList;
 import java.util.Collections;

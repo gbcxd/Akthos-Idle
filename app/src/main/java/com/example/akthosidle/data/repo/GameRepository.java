@@ -1,4 +1,4 @@
-package com.example.akthosidle.data;
+package com.example.akthosidle.data.repo;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -6,14 +6,14 @@ import android.content.SharedPreferences;
 import androidx.annotation.Nullable;
 import androidx.lifecycle.MutableLiveData;
 
-import com.example.akthosidle.model.Drop;
-import com.example.akthosidle.model.EquipmentSlot;
-import com.example.akthosidle.model.InventoryItem;
-import com.example.akthosidle.model.Item;
-import com.example.akthosidle.model.Monster;
-import com.example.akthosidle.model.PlayerCharacter;
-import com.example.akthosidle.model.SkillId;
-import com.example.akthosidle.model.Stats;
+import com.example.akthosidle.domain.model.Drop;
+import com.example.akthosidle.domain.model.EquipmentSlot;
+import com.example.akthosidle.data.dtos.InventoryItem;
+import com.example.akthosidle.domain.model.Item;
+import com.example.akthosidle.domain.model.Monster;
+import com.example.akthosidle.domain.model.PlayerCharacter;
+import com.example.akthosidle.domain.model.SkillId;
+import com.example.akthosidle.domain.model.Stats;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -35,7 +35,7 @@ public class GameRepository {
     private final Gson gson = new Gson();
 
     // Definitions
-    private final Map<String, Item> items = new HashMap<>();
+    public final Map<String, Item> items = new HashMap<>();
     private final Map<String, Monster> monsters = new HashMap<>();
 
     // Runtime save
@@ -120,7 +120,9 @@ public class GameRepository {
         thief.id = "shadow_thief";
         thief.name = "Shadow Thief";
         thief.stats = new Stats(8, 4, 0.15, 40, 0.05, 1.5);
-        thief.exp = 20;
+        // Ensure your Monster has fields expReward & goldReward (if not, add them in Monster class)
+        thief.expReward = 20;
+        thief.goldReward = 0;
         thief.drops = new ArrayList<>();
         thief.drops.add(new Drop("food_apple", 1, 3, 0.5));
         monsters.put(thief.id, thief);
@@ -385,28 +387,79 @@ public class GameRepository {
         return k.equals("ATTACK") || k.equals("STRENGTH") || k.equals("DEFENSE") || k.equals("HP");
     }
 
-    // item definitions map is already in repo; ensure it’s visible:
-    public final Map<String, Item> items = new HashMap<>();
+    /* ============================
+     * Pending loot (buffer + LiveData)
+     * ============================ */
 
-    // pending loot live-data
-    public final MutableLiveData<List<InventoryItem>> pendingLootLive = new MutableLiveData<>(new ArrayList<>());
+    // Internal buffer of pending loot (supports items & currencies)
+    private final List<PendingLoot> pendingLoot = new ArrayList<>();
 
+    // Live list for UI that shows items only (non-currency) as InventoryItem
+    public final MutableLiveData<List<InventoryItem>> pendingLootLive =
+            new MutableLiveData<>(new ArrayList<>());
+
+    /** Add currency to pending buffer (e.g., gold). */
     public void addPendingCurrency(String code, String name, int qty) {
+        if (qty <= 0) return;
+        String id = "currency:" + code; // e.g., currency:gold
+        for (PendingLoot pl : pendingLoot) {
+            if (pl.isCurrency && id.equals(pl.id)) {
+                pl.quantity += qty;
+                updatePendingLootLive();
+                save();
+                return;
+            }
+        }
         PendingLoot pl = new PendingLoot();
-        pl.id = "currency:" + code; // e.g., currency:gold
+        pl.id = id;
         pl.name = name;
         pl.quantity = qty;
         pl.isCurrency = true;
         pendingLoot.add(pl);
+        updatePendingLootLive();
         save();
     }
 
-    public java.util.List<PendingLoot> getPendingLoot() {
-        return new java.util.ArrayList<>(pendingLoot);
+    /** REQUIRED by CombatEngine: add an item stack to pending loot. */
+    public void addPendingLoot(String itemId, String name, int qty) {
+        if (itemId == null || qty <= 0) return;
+        for (PendingLoot pl : pendingLoot) {
+            if (!pl.isCurrency && itemId.equals(pl.id)) {
+                pl.quantity += qty;
+                updatePendingLootLive();
+                save();
+                return;
+            }
+        }
+        PendingLoot pl = new PendingLoot();
+        pl.id = itemId;
+        pl.name = (name != null ? name : itemId);
+        pl.quantity = qty;
+        pl.isCurrency = false;
+        pendingLoot.add(pl);
+        updatePendingLootLive();
+        save();
+    }
+
+    /** Helper to mirror internal buffer into LiveData list for UI. */
+    private void updatePendingLootLive() {
+        List<InventoryItem> view = new ArrayList<>();
+        for (PendingLoot pl : pendingLoot) {
+            if (!pl.isCurrency) {
+                view.add(new InventoryItem(pl.id, pl.name, pl.quantity));
+            }
+        }
+        pendingLootLive.postValue(view);
+    }
+
+    /** Snapshot of entire pending buffer (items + currencies). */
+    public List<PendingLoot> getPendingLoot() {
+        return new ArrayList<>(pendingLoot);
     }
 
     public void clearPendingLoot() {
         pendingLoot.clear();
+        updatePendingLootLive();
         save();
     }
 
@@ -424,20 +477,22 @@ public class GameRepository {
             }
         }
         pendingLoot.clear();
+        updatePendingLootLive();
         save();
     }
 
-
+    /** Variant that takes an explicit player (kept for compatibility). */
     public synchronized void collectPendingLoot(PlayerCharacter pc) {
+        // Move from LiveData view into the character (items only)
         List<InventoryItem> cur = new ArrayList<>(pendingLootLive.getValue());
         for (InventoryItem it : cur) {
             pc.addItem(it.id, it.quantity);
         }
-        cur.clear();
-        pendingLootLive.postValue(cur);
+        // Also clear internal buffer to avoid dupes
+        pendingLoot.removeIf(pl -> !pl.isCurrency);
+        updatePendingLootLive();
         save();
     }
-
 
     public long getGold() {
         return loadOrCreatePlayer().gold;
@@ -448,10 +503,6 @@ public class GameRepository {
         pc.gold = Math.max(0, pc.gold + amount);
         save();
     }
-
-
-    private final java.util.List<PendingLoot> pendingLoot = new java.util.ArrayList<>();
-
 
     public static class PendingLoot {
         public String id;        // e.g. "iron_ore" OR "currency:gold"

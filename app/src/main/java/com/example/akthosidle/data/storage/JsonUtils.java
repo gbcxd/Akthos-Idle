@@ -1,4 +1,4 @@
-package com.example.akthosidle.data;
+package com.example.akthosidle.data.storage;
 
 import android.content.Context;
 import java.io.*;

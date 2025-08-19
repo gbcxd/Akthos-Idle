@@ -1,4 +1,4 @@
-package com.example.akthosidle.model;
+package com.example.akthosidle.data.dtos;
 
 /** Lightweight DTO for listing inventory items in UI. */
 public class InventoryItem {

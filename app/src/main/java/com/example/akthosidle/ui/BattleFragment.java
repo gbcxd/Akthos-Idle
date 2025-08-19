@@ -18,9 +18,9 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.akthosidle.R;
-import com.example.akthosidle.battle.CombatEngine;
-import com.example.akthosidle.model.InventoryItem;
-import com.example.akthosidle.model.PlayerCharacter;
+import com.example.akthosidle.domain.services.CombatEngine;
+import com.example.akthosidle.data.dtos.InventoryItem;
+import com.example.akthosidle.domain.model.PlayerCharacter;
 
 import java.util.List;
 

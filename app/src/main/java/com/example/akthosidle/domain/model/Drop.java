@@ -1,4 +1,4 @@
-package com.example.akthosidle.model;
+package com.example.akthosidle.domain.model;
 
 /** Loot drop entry for monsters. */
 public class Drop {
