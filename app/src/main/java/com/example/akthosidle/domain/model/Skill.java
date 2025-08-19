@@ -1,38 +1,43 @@
 package com.example.akthosidle.domain.model;
 
-/** Simple skill record: level + experience. */
 public class Skill {
     public int level;
     public int exp;
     public int xp;
 
-    public class Skill {
-        public int level = 1;
-        public int exp = 0;
-
-        public int reqExp(int lvl) { // smooth curve, tweak later
-            return 30 + (int)Math.round(25 * Math.pow(lvl, 1.35));
-        }
-        public boolean addExp(int x) {
-            exp += x;
-            boolean leveled = false;
-            while (exp >= reqExp(level)) { exp -= reqExp(level); level++; leveled = true; }
-            return leveled;
-        }
+    public Skill() {
+        this.level = 1;
+        this.exp = 0;
     }
 
-    /** Optional helper to add XP and handle simple level-ups. */
-    public void addXp(int amount) {
-        if (amount <= 0) return;
+    public Skill(int level, int exp) {
+        this.level = level;
+        this.exp = exp;
+    }
+
+    /**
+     * Adds exp and returns true if a level-up happened.
+     */
+    public boolean addExp(int amount) {
+        boolean leveledUp = false;
         this.exp += amount;
-        while (this.exp >= xpToLevel(this.level)) {
-            this.exp -= xpToLevel(this.level);
+
+        // Keep checking in case multiple levels are gained at once
+        while (this.exp >= requiredXpForLevel(this.level)) {
+            this.exp -= requiredXpForLevel(this.level);
             this.level++;
+            leveledUp = true;
         }
+
+        return leveledUp;
     }
 
-    private int xpToLevel(int lvl) {
-        // Simple curve; tweak as desired
-        return 50 + (lvl * 25);
+    /**
+     * Exponential XP curve (like RuneScape-style).
+     * Example: base 100, grows ~1.2x each level.
+     */
+    private int requiredXpForLevel(int lvl) {
+        // Formula: base * (growth ^ (lvl-1))
+        return (int) Math.floor(100 * Math.pow(1.2, lvl - 1));
     }
 }

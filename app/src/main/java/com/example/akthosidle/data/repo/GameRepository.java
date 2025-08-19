@@ -3,6 +3,7 @@ package com.example.akthosidle.data.repo;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.AssetManager;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.lifecycle.MutableLiveData;
@@ -43,7 +44,7 @@ public class GameRepository {
     public final Map<String, Item> items = new HashMap<>();
     private final Map<String, Monster> monsters = new HashMap<>();
 
-    // NEW: Actions (progression content)
+    // Actions (progression content)
     private final Map<String, Action> actions = new HashMap<>();
 
     // Runtime save
@@ -59,7 +60,7 @@ public class GameRepository {
     }
 
     /* =========================================================
-     * Load static definitions (items / monsters / actions).
+     * Load static definitions (items / monsters).
      * ========================================================= */
     public void loadDefinitions() {
         if (!items.isEmpty() || !monsters.isEmpty()) return;
@@ -129,8 +130,8 @@ public class GameRepository {
         thief.stats = new Stats(8, 4, 0.15, 40, 0.05, 1.5);
         thief.expReward = 20;
         thief.goldReward = 0;
-        thief.silverReward = 12;    // soft currency
-        thief.slayerReward = 0;     // slayer coins
+        thief.silverReward = 12;
+        thief.slayerReward = 0;
         thief.drops = new ArrayList<>();
         thief.drops.add(new Drop("food_apple", 1, 3, 0.5));
         monsters.put(thief.id, thief);
@@ -141,7 +142,7 @@ public class GameRepository {
         if (!actions.isEmpty()) return;
         AssetManager am = app.getAssets();
         try (InputStream is = am.open("game/actions.v1.json")) {
-            String json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            String json = readStream(is); // ✅ API 24+ compatible
             Type t = new TypeToken<List<Action>>() {}.getType();
             List<Action> list = gson.fromJson(json, t);
             if (list != null) {
@@ -310,9 +311,6 @@ public class GameRepository {
 
     /**
      * Potions = CONSUMABLE that are NOT food.
-     * - combatOnly: affects combat (stats != null OR skillBuffs contains combat skills)
-     * - nonCombatOnly: affects only non-combat skills
-     * If both flags false -> return all potions.
      */
     public List<InventoryItem> getPotions(boolean combatOnly, boolean nonCombatOnly) {
         List<InventoryItem> list = new ArrayList<>();
@@ -604,6 +602,24 @@ public class GameRepository {
     private static String capitalize(String s) {
         if (s == null || s.isEmpty()) return s;
         return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+    /** Backwards-compatible stream reader (API 24+). */
+    private static String readStream(InputStream is) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        byte[] buf = new byte[4096];
+        int n;
+        while ((n = is.read(buf)) != -1) {
+            sb.append(new String(buf, 0, n, StandardCharsets.UTF_8));
+        }
+        return sb.toString();
+    }
+
+    /* ============================
+     * Toast Helper
+     * ============================ */
+    public void toast(String msg) {
+        Toast.makeText(app, msg, Toast.LENGTH_SHORT).show();
     }
 
     public static class PendingLoot {
