@@ -41,6 +41,10 @@ public class GameRepository {
     // Runtime save
     private PlayerCharacter player;
 
+    // ===== NEW: live currency balances for top bar =====
+    public final MutableLiveData<Map<String, Long>> currencyLive =
+            new MutableLiveData<>(new HashMap<>());
+
     public GameRepository(Context appContext) {
         this.app = appContext.getApplicationContext();
         this.sp = app.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
@@ -147,6 +151,8 @@ public class GameRepository {
                 player.currentHp = maxHp;
                 save();
             }
+            // NEW: publish balances to top bar
+            publishCurrencies();
             return player;
         }
 
@@ -169,6 +175,7 @@ public class GameRepository {
         }
 
         save();
+        publishCurrencies(); // NEW
         return player;
     }
 
@@ -404,6 +411,7 @@ public class GameRepository {
                 pl.quantity += qty;
                 updatePendingLootLive();
                 save();
+                publishCurrencies(); // NEW
                 return;
             }
         }
@@ -415,6 +423,7 @@ public class GameRepository {
         pendingLoot.add(pl);
         updatePendingLootLive();
         save();
+        publishCurrencies(); // NEW
     }
 
     /** REQUIRED by CombatEngine: add an item stack to pending loot. */
@@ -458,6 +467,7 @@ public class GameRepository {
         pendingLoot.clear();
         updatePendingLootLive();
         save();
+        publishCurrencies(); // NEW (in case currencies were pending)
     }
 
     /** Apply all pending loot to the save (items & currencies). */
@@ -476,6 +486,7 @@ public class GameRepository {
         pendingLoot.clear();
         updatePendingLootLive();
         save();
+        publishCurrencies(); // NEW
     }
 
     /** Variant that takes an explicit player (kept for compatibility). */
@@ -489,6 +500,7 @@ public class GameRepository {
         pendingLoot.removeIf(pl -> !pl.isCurrency);
         updatePendingLootLive();
         save();
+        publishCurrencies(); // NEW (in case currencies were in buffer separately)
     }
 
     /* ============================
@@ -502,12 +514,16 @@ public class GameRepository {
         PlayerCharacter pc = loadOrCreatePlayer();
         pc.addCurrency(id, amount);
         save();
+        publishCurrencies(); // NEW
     }
 
     public boolean spendCurrency(String id, long amount) {
         PlayerCharacter pc = loadOrCreatePlayer();
         boolean ok = pc.spendCurrency(id, amount);
-        if (ok) save();
+        if (ok) {
+            save();
+            publishCurrencies(); // NEW
+        }
         return ok;
     }
 
@@ -527,6 +543,15 @@ public class GameRepository {
     public void addGold(long amount) {
         addCurrency("gold", amount);
     }
+
+    // ===== NEW: publish balances to observers (MainActivity toolbar, etc.) =====
+    private void publishCurrencies() {
+        PlayerCharacter pc = loadOrCreatePlayer();
+        currencyLive.postValue(new HashMap<>(pc.currencies));
+    }
+
+    // Optional getter
+    public MutableLiveData<Map<String, Long>> currenciesLive() { return currencyLive; }
 
     private static String capitalize(String s) {
         if (s == null || s.isEmpty()) return s;
