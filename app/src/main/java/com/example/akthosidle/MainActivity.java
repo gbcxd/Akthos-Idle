@@ -1,6 +1,8 @@
 package com.example.akthosidle;
 
 import android.os.Bundle;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.TextView;
 
@@ -14,6 +16,8 @@ import androidx.navigation.ui.NavigationUI;
 import com.example.akthosidle.data.repo.GameRepository;
 import com.example.akthosidle.databinding.ActivityMainBinding;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.gson.internal.GsonBuildConfig;
+// ✅ Import your app's BuildConfig
 
 import java.text.NumberFormat;
 import java.util.HashMap;
@@ -40,11 +44,12 @@ public class MainActivity extends AppCompatActivity {
         // Hook the Toolbar as the Activity's ActionBar
         setSupportActionBar(b.toolbar);
 
+        // "+" button next to gold → navigate to buy screen
         View btnAddGold = b.toolbar.findViewById(R.id.btn_add_gold);
         if (btnAddGold != null) {
             btnAddGold.setOnClickListener(v -> {
                 if (navController != null) {
-                    navController.navigate(R.id.buyGoldFragment); // ← nav destination we’ll add
+                    navController.navigate(R.id.buyGoldFragment);
                 }
             });
         }
@@ -80,6 +85,38 @@ public class MainActivity extends AppCompatActivity {
         bottomNav.setOnItemReselectedListener(item -> { /* no-op */ });
     }
 
+    // ===== Dev overflow menu (debug only, with safe fallback) =====
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_dev, menu);
+
+        boolean isDebug;
+        try {
+            isDebug = BuildConfig.DEBUG; // normal path
+        } catch (Throwable t) {
+            // Fallback: if something odd happens with BuildConfig, show dev menu
+            isDebug = true;
+        }
+
+        menu.setGroupVisible(R.id.group_dev, isDebug);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        int id = item.getItemId();
+        if (id == R.id.action_give_apples) {
+            // 🍎 Give 5x Apple
+            repo.giveItem("food_apple", 5);
+            return true;
+        } else if (id == R.id.action_give_heal_pots) {
+            // 🧪 Give 2x Lesser Healing Potion (ensure item exists in loadDefinitions)
+            repo.giveItem("pot_heal_small", 2);
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
     @Override
     public boolean onSupportNavigateUp() {
         return NavigationUI.navigateUp(navController, appBarConfig) || super.onSupportNavigateUp();
@@ -107,7 +144,6 @@ public class MainActivity extends AppCompatActivity {
     private void setAmount(TextView tv, long value, int cellId) {
         if (tv == null) return;
         tv.setText(NumberFormat.getIntegerInstance(Locale.getDefault()).format(value));
-        // If you want to hide cells when zero, toggle here (currently always visible):
         View cell = b.toolbar.findViewById(cellId);
         if (cell != null) cell.setVisibility(View.VISIBLE);
         // To hide zeros instead, use:

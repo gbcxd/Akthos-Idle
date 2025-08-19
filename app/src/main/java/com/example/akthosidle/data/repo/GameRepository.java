@@ -677,4 +677,12 @@ public class GameRepository {
         public int quantity;
         public boolean isCurrency;
     }
+
+    public void giveItem(String itemId, int qty) {
+        if (itemId == null || qty == 0) return;
+        PlayerCharacter pc = loadOrCreatePlayer();
+        pc.addItem(itemId, qty);
+        save();
+        toast("Granted " + qty + "× " + itemName(itemId));
+    }
 }

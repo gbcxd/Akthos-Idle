@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <group
+        android:id="@+id/group_dev"
+        android:visible="true">
+
+        <item
+            android:id="@+id/action_give_apples"
+            android:title="Give 5× Apple"
+            app:showAsAction="never" />
+
+        <item
+            android:id="@+id/action_give_heal_pots"
+            android:title="Give 2× Healing Potions"
+            app:showAsAction="never" />
+
+    </group>
+
+</menu>
