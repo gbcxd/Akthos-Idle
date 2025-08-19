@@ -1,4 +1,4 @@
-package com.example.akthosidle.domain.services;
+package com.example.akthosidle.domain;
 
 import android.os.Handler;
 import android.os.Looper;
