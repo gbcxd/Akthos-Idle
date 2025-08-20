@@ -1,115 +1,71 @@
 package com.example.akthosidle.ui;
 
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.akthosidle.R;
-import com.example.akthosidle.databinding.RowSkillBinding;
-import com.example.akthosidle.domain.model.SkillId;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class SkillAdapter extends RecyclerView.Adapter<SkillAdapter.VH> {
 
-    public static class Row {
-        public final SkillId id;
-        public final int level;
-        public final int xp;
-        public final int nextReq;
+    public interface OnSkillClick {
+        void onClick(SkillRow row);
+    }
 
-        public Row(SkillId id, int level, int xp, int nextReq) {
-            this.id = id; this.level = level; this.xp = xp; this.nextReq = nextReq;
+    public static class SkillRow {
+        public final String id;    // SkillId enum name string (e.g., "ATTACK")
+        public final String name;  // Display name
+        public final int level;    // Current level
+        public final int iconRes;  // Drawable res id
+
+        public SkillRow(String id, String name, int level, int iconRes) {
+            this.id = id; this.name = name; this.level = level; this.iconRes = iconRes;
         }
     }
 
-    public interface OnSkillClick {
-        void onSkillClick(Row row);
-    }
+    private final List<SkillRow> data;
+    private final OnSkillClick onClick;
 
-    private final List<Row> items = new ArrayList<>();
-    private final OnSkillClick click;
-
-    public SkillAdapter(OnSkillClick click) { this.click = click; }
-
-    public void submit(List<Row> rows) {
-        items.clear();
-        items.addAll(rows);
-        notifyDataSetChanged();
+    public SkillAdapter(List<SkillRow> data, OnSkillClick onClick) {
+        this.data = data;
+        this.onClick = onClick;
     }
 
     @NonNull @Override
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        RowSkillBinding b = RowSkillBinding.inflate(
-                LayoutInflater.from(parent.getContext()), parent, false);
-        return new VH(b);
+        View v = LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.row_skill, parent, false);
+        return new VH(v);
     }
 
     @Override
     public void onBindViewHolder(@NonNull VH h, int pos) {
-        Row r = items.get(pos);
-        h.bind(r, click);
+        SkillRow r = data.get(pos);
+        h.tvName.setText(r.name);
+        h.tvLevel.setText("Level " + r.level);
+        h.imgIcon.setImageResource(r.iconRes);
+        h.itemView.setOnClickListener(v -> {
+            if (onClick != null) onClick.onClick(r);
+        });
     }
 
-    @Override
-    public int getItemCount() { return items.size(); }
+    @Override public int getItemCount() { return data.size(); }
 
     static class VH extends RecyclerView.ViewHolder {
-        private final RowSkillBinding b;
-        VH(RowSkillBinding b) {
-            super(b.getRoot());
-            this.b = b;
-        }
-
-        void bind(Row r, OnSkillClick click) {
-            // Icon (use your own drawables if you have them; fallback generic)
-            int iconRes = iconFor(r.id);
-            b.imgIcon.setImageResource(iconRes);
-
-            // Title & subtitle
-            b.tvName.setText(labelFor(r.id));
-            b.tvSub.setText("Lv " + Math.max(1, r.level) + " • " + r.xp + " / " + r.nextReq + " XP");
-
-            // Progress
-            b.bar.setMax(Math.max(1, r.nextReq));
-            b.bar.setProgress(Math.min(r.nextReq, Math.max(0, r.xp)));
-
-            b.getRoot().setOnClickListener(_v -> {
-                if (click != null) click.onSkillClick(r);
-            });
-        }
-
-        private static int iconFor(SkillId id) {
-            switch (id) {
-                case ATTACK:      return R.drawable.ic_sword;
-                case STRENGTH:    return R.drawable.ic_gauntlet;
-                case DEFENSE:     return R.drawable.ic_shield;
-                case HP:          return R.drawable.ic_heart;
-                case WOODCUTTING: return R.drawable.ic_tree;
-                case MINING:      return R.drawable.ic_skill_smithing;
-                case FISHING:     return R.drawable.ic_skill_fishing;
-                case GATHERING:   return R.drawable.ic_skill_gathering;
-                case HUNTING:     return R.drawable.ic_skill_harvesting;
-                case CRAFTING:    return R.drawable.ic_skill_crafting;
-                case SMITHING:    return R.drawable.ic_skill_smithing;
-                case COOKING:     return R.drawable.ic_skill_cooking;
-                case ALCHEMY:     return R.drawable.ic_flask;
-                case TAILORING:   return R.drawable.ic_skill_tailoring;
-                case CARPENTRY:   return R.drawable.ic_skill_carpentry;
-                case ENCHANTING:  return R.drawable.ic_skill_enchanting;
-                case COMMUNITY:   return R.drawable.ic_skill_community;
-                case HARVESTING:  return R.drawable.ic_skill_harvesting;
-                default:          return android.R.drawable.ic_menu_info_details;
-            }
-        }
-
-        private static String labelFor(SkillId id) {
-            // Human-friendly capitalization
-            String raw = id.name().replace('_', ' ').toLowerCase();
-            return Character.toUpperCase(raw.charAt(0)) + raw.substring(1);
+        ImageView imgIcon;
+        TextView tvName, tvLevel;
+        VH(@NonNull View itemView) {
+            super(itemView);
+            imgIcon = itemView.findViewById(R.id.imgIcon);
+            tvName  = itemView.findViewById(R.id.tvName);
+            tvLevel = itemView.findViewById(R.id.tvLevel);
         }
     }
 }

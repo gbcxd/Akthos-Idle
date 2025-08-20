@@ -9,100 +9,106 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.navigation.fragment.NavHostFragment;
-import androidx.recyclerview.widget.DividerItemDecoration;
 import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.akthosidle.R;
+import com.example.akthosidle.data.repo.GameRepository;
+import com.example.akthosidle.databinding.FragmentSkillsBinding;
+import com.example.akthosidle.domain.model.PlayerCharacter;
+import com.example.akthosidle.domain.model.Skill;
 import com.example.akthosidle.domain.model.SkillId;
+import com.example.akthosidle.ui.SkillAdapter;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
-/**
- * Shows the list of skills. Clicking one navigates to SkillDetailFragment,
- * passing the selected skill id via the "skill_id" argument.
- */
 public class SkillsFragment extends Fragment {
 
-    private RecyclerView recycler;
-    private SkillAdapter adapter;
+    private FragmentSkillsBinding b;
+    private GameRepository repo;
 
-    @Nullable
-    @Override
-    public View onCreateView(
-            @NonNull LayoutInflater inflater,
-            @Nullable ViewGroup container,
-            @Nullable Bundle savedInstanceState
-    ) {
-        return inflater.inflate(R.layout.fragment_skills, container, false);
+    @Nullable @Override
+    public View onCreateView(@NonNull LayoutInflater inflater,
+                             @Nullable ViewGroup container,
+                             @Nullable Bundle savedInstanceState) {
+        b = FragmentSkillsBinding.inflate(inflater, container, false);
+        return b.getRoot();
     }
 
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(v, savedInstanceState);
 
-        recycler = v.findViewById(R.id.recycler);
-        recycler.setLayoutManager(new LinearLayoutManager(requireContext()));
-        recycler.addItemDecoration(new DividerItemDecoration(requireContext(), DividerItemDecoration.VERTICAL));
+        repo = new GameRepository(requireContext().getApplicationContext());
+        repo.loadDefinitions();
+        PlayerCharacter pc = repo.loadOrCreatePlayer();
 
-        // Build a simple list of all skills (you can filter/order later)
-        List<String> skills = new ArrayList<>();
-        for (SkillId s : SkillId.values()) {
-            skills.add(s.name());
-        }
+        b.recycler.setLayoutManager(new LinearLayoutManager(requireContext()));
+        b.recycler.setHasFixedSize(true);
 
-        adapter = new SkillAdapter(skills, this::onSkillClick);
-        recycler.setAdapter(adapter);
+        List<SkillAdapter.SkillRow> rows = buildRows(pc);
+        SkillAdapter adapter = new SkillAdapter(rows, row -> {
+            Bundle args = new Bundle();
+            // nav_graph arg name is "skillId" (string)
+            args.putString("skillId", row.id);
+            NavHostFragment.findNavController(this)
+                    .navigate(R.id.action_nav_skills_to_skillDetail, args);
+        });
+        b.recycler.setAdapter(adapter);
     }
 
-    private void onSkillClick(String skillId) {
-        Bundle args = new Bundle();
-        args.putString("skill_id", skillId);
-        NavHostFragment.findNavController(this)
-                .navigate(R.id.action_nav_skills_to_skillDetail, args);
+    private List<SkillAdapter.SkillRow> buildRows(PlayerCharacter pc) {
+        Map<SkillId, Skill> map = (pc.skills != null) ? pc.skills : new EnumMap<>(SkillId.class);
+        List<SkillAdapter.SkillRow> out = new ArrayList<>();
+
+        for (SkillId id : SkillId.values()) {
+            Skill s = map.get(id);
+            int lvl = (s != null) ? s.level : 1;
+            String name = prettify(id.name());
+            int icon = iconFor(id);
+            out.add(new SkillAdapter.SkillRow(id.name(), name, lvl, icon));
+        }
+        return out;
     }
 
-    // --- Minimal inline adapter (use your own if you already have one) ---
-    private static class SkillAdapter extends RecyclerView.Adapter<SkillViewHolder> {
-        interface OnClick { void onClick(String skillId); }
-
-        private final List<String> data;
-        private final OnClick click;
-
-        SkillAdapter(List<String> data, OnClick click) {
-            this.data = data != null ? data : Arrays.asList();
-            this.click = click;
-        }
-
-        @NonNull @Override
-        public SkillViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View item = LayoutInflater.from(parent.getContext())
-                    .inflate(android.R.layout.simple_list_item_1, parent, false);
-            return new SkillViewHolder(item);
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull SkillViewHolder h, int position) {
-            final String skillId = data.get(position);
-            h.bind(skillId);
-            h.itemView.setOnClickListener(v -> {
-                if (click != null) click.onClick(skillId);
-            });
-        }
-
-        @Override public int getItemCount() { return data.size(); }
+    private static String prettify(String enumName) {
+        String lower = enumName.replace('_',' ').toLowerCase(Locale.US);
+        return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
     }
 
-    private static class SkillViewHolder extends RecyclerView.ViewHolder {
-        private final android.widget.TextView tv;
-        SkillViewHolder(@NonNull View itemView) {
-            super(itemView);
-            tv = itemView.findViewById(android.R.id.text1);
+    private int iconFor(SkillId id) {
+        // Map per-skill icons here (use your actual drawables; fallback to generic)
+        switch (id) {
+            case ATTACK:     return R.drawable.ic_gauntlet;
+            case STRENGTH:   return R.drawable.ic_sword;
+            case DEFENSE:    return R.drawable.ic_shield;
+            case ARCHERY:    return R.drawable.ic_shield;
+            case MAGIC:      return R.drawable.ic_shield;
+            case HP:         return R.drawable.ic_heart;
+            case WOODCUTTING:return R.drawable.ic_skill_woodcutting;
+            case MINING:     return R.drawable.ic_skill_mining;
+            case FISHING:    return R.drawable.ic_skill_fishing;
+            case GATHERING:  return R.drawable.ic_skill_gathering;
+            case HUNTING:    return R.drawable.ic_skill_hunting;
+            case CRAFTING:   return R.drawable.ic_skill_crafting;
+            case SMITHING:   return R.drawable.ic_skill_smithing;
+            case COOKING:    return R.drawable.ic_skill_cooking;
+            case ALCHEMY:    return R.drawable.ic_skill_alchemy;
+            case TAILORING:  return R.drawable.ic_skill_tailoring;
+            case CARPENTRY:  return R.drawable.ic_skill_carpentry;
+            case ENCHANTING: return R.drawable.ic_skill_enchanting;
+            case COMMUNITY:  return R.drawable.ic_skill_community;
+            case HARVESTING: return R.drawable.ic_skill_harvesting;
+            default:         return R.drawable.ic_skill_generic;
         }
-        void bind(String skillId) {
-            tv.setText(skillId);
-        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        b = null;
     }
 }
