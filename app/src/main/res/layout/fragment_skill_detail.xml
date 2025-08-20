@@ -10,28 +10,54 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
-        <!-- Title -->
+        <!-- Skill name + level -->
         <TextView
             android:id="@+id/tvSkillTitle"
-            android:textStyle="bold"
-            android:textSize="20sp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Skill" />
-
-        <!-- Actions for this skill -->
-        <TextView
-            android:layout_marginTop="16dp"
-            android:text="Action"
+            android:textAppearance="?attr/textAppearanceHeadlineSmall"
+            android:text="Skill"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content" />
 
-        <Spinner
-            android:id="@+id/spinner_actions"
+        <!-- Selected resource row -->
+        <LinearLayout
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content">
 
-        <!-- Live progress -->
+            <ImageButton
+                android:id="@+id/btn_pick_action"
+                android:contentDescription="@string/select_resource"
+                android:src="@drawable/ic_help"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:layout_width="48dp"
+                android:layout_height="48dp" />
+
+            <LinearLayout
+                android:orientation="vertical"
+                android:layout_marginStart="12dp"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:id="@+id/tvSelectedAction"
+                    android:text="Choose a resource…"
+                    android:textAppearance="?attr/textAppearanceBodyLarge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    android:id="@+id/tvActionReq"
+                    android:text=""
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Live status/progress -->
         <TextView
             android:id="@+id/tvStatus"
             android:layout_marginTop="16dp"
@@ -54,31 +80,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content" />
 
-        <!-- Controls -->
-        <LinearLayout
+        <!-- Single Play/Stop toggle -->
+        <Button
+            android:id="@+id/btn_toggle"
             android:layout_marginTop="16dp"
-            android:gravity="end"
-            android:orientation="horizontal"
+            android:text="@string/play"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
-
-            <Button
-                android:id="@+id/btn_cancel"
-                android:text="Cancel"
-                android:enabled="false"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-
-            <Space
-                android:layout_width="12dp"
-                android:layout_height="0dp" />
-
-            <Button
-                android:id="@+id/btn_start"
-                android:text="Start"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
-
+            android:layout_height="wrap_content"/>
     </LinearLayout>
 </ScrollView>

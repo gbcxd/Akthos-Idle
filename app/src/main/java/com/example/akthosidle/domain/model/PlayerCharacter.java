@@ -4,6 +4,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 
+
 /** Player save model: stats, skills, equipment, inventory, and quick selections. */
 public class PlayerCharacter {
 
@@ -43,12 +44,6 @@ public class PlayerCharacter {
 
     // ---------- Computed helpers ----------
     public Stats totalStats(Stats gearSum) { return Stats.add(base, gearSum); }
-
-    public Skill skill(SkillId id) {
-        Skill s = skills.get(id);
-        if (s == null) { s = new Skill(1, 0); skills.put(id, s); }
-        return s;
-    }
 
     // ---------- Inventory helpers ----------
     public void addItem(String itemId, int qty) {
@@ -106,5 +101,25 @@ public class PlayerCharacter {
         int healed = newHp - cur;
         currentHp = newHp;
         return healed;
+    }
+
+    /** Get-or-create the Skill object for a given id. */
+    public Skill skill(SkillId id) {
+        Skill s = skills.get(id);
+        if (s == null) {
+            s = new Skill(); // level 1, 0 xp
+            skills.put(id, s);
+        }
+        return s;
+    }
+
+    /** Convenience: current level for a skill (always >=1). */
+    public int getSkillLevel(SkillId id) {
+        return skill(id).level;
+    }
+
+    /** Add XP to a skill and return whether it leveled up. */
+    public boolean addSkillExp(SkillId id, int amount) {
+        return skill(id).addXp(amount);
     }
 }

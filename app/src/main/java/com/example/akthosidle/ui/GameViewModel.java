@@ -6,7 +6,7 @@ import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 
-import com.example.akthosidle.domain.CombatEngine;
+import com.example.akthosidle.engine.CombatEngine;
 import com.example.akthosidle.data.repo.GameRepository;
 import com.example.akthosidle.domain.model.EquipmentSlot;
 import com.example.akthosidle.data.dtos.InventoryItem;
