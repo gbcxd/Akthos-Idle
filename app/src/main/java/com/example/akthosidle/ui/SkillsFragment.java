@@ -30,7 +30,8 @@ public class SkillsFragment extends Fragment {
     private FragmentSkillsBinding b;
     private GameRepository repo;
 
-    @Nullable @Override
+    @Nullable
+    @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
                              @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
@@ -65,6 +66,9 @@ public class SkillsFragment extends Fragment {
         List<SkillAdapter.SkillRow> out = new ArrayList<>();
 
         for (SkillId id : SkillId.values()) {
+            // Skip combat skills in the skilling menu
+            if (isCombat(id)) continue;
+
             Skill s = map.get(id);
             int lvl = (s != null) ? s.level : 1;
             String name = prettify(id.name());
@@ -72,6 +76,21 @@ public class SkillsFragment extends Fragment {
             out.add(new SkillAdapter.SkillRow(id.name(), name, lvl, icon));
         }
         return out;
+    }
+
+    /** Treat these as combat skills and exclude them from the skilling list. */
+    private boolean isCombat(SkillId id) {
+        switch (id) {
+            case ATTACK:
+            case STRENGTH:
+            case DEFENSE:
+            case ARCHERY:
+            case MAGIC:
+            case HP:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static String prettify(String enumName) {
@@ -88,6 +107,7 @@ public class SkillsFragment extends Fragment {
             case ARCHERY:    return R.drawable.ic_shield;
             case MAGIC:      return R.drawable.ic_shield;
             case HP:         return R.drawable.ic_heart;
+
             case WOODCUTTING:return R.drawable.ic_skill_woodcutting;
             case MINING:     return R.drawable.ic_skill_mining;
             case FISHING:    return R.drawable.ic_skill_fishing;
@@ -102,6 +122,7 @@ public class SkillsFragment extends Fragment {
             case ENCHANTING: return R.drawable.ic_skill_enchanting;
             case COMMUNITY:  return R.drawable.ic_skill_community;
             case HARVESTING: return R.drawable.ic_skill_harvesting;
+
             default:         return R.drawable.ic_skill_generic;
         }
     }
