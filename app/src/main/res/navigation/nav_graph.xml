@@ -39,13 +39,12 @@
     <!-- Skill detail (spinner, start/cancel, progress) -->
     <fragment
         android:id="@+id/skillDetailFragment"
-        android:name="com.example.akthosidle.ui.SkillDetailFragment"
+        android:name="com.example.akthosidle.ui.skill.SkillDetailFragment"
         android:label="Skill"
         tools:layout="@layout/fragment_skill_detail">
 
-        <!-- Match the key used in SkillDetailFragment.ARG_SKILL_ID = "skill_id" -->
         <argument
-            android:name="skill_id"
+            android:name="skillId"
             app:argType="string"
             android:defaultValue="MINING" />
     </fragment>
