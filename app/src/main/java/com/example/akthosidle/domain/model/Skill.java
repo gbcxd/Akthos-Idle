@@ -18,7 +18,7 @@ public class Skill {
     /**
      * Adds exp and returns true if a level-up happened.
      */
-    public boolean addExp(int amount) {
+    public boolean addXp(int amount) {
         boolean leveledUp = false;
         this.exp += amount;
 

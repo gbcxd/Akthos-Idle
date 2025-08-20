@@ -67,7 +67,7 @@ public class SkillService {
 
         // exp
         PlayerCharacter pc = repo.loadOrCreatePlayer();
-        boolean leveled = pc.skill(a.skill).addExp(a.exp);
+        boolean leveled = pc.skill(a.skill).addXp(a.exp);
         if (leveled) repo.toast("Level up: " + a.skill.name() + " " + pc.skill(a.skill).level); // implement UI hook as needed
 
         repo.save();

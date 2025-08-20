@@ -23,11 +23,32 @@
         android:label="Inventory"
         tools:layout="@layout/fragment_inventory" />
 
+    <!-- Skills list -->
     <fragment
         android:id="@+id/nav_skills"
         android:name="com.example.akthosidle.ui.SkillsFragment"
         android:label="Skills"
-        tools:layout="@layout/fragment_skills" />
+        tools:layout="@layout/fragment_skills">
+
+        <!-- Navigate from Skills list → Skill detail -->
+        <action
+            android:id="@+id/action_nav_skills_to_skillDetail"
+            app:destination="@id/skillDetailFragment" />
+    </fragment>
+
+    <!-- Skill detail (spinner, start/cancel, progress) -->
+    <fragment
+        android:id="@+id/skillDetailFragment"
+        android:name="com.example.akthosidle.ui.SkillDetailFragment"
+        android:label="Skill"
+        tools:layout="@layout/fragment_skill_detail">
+
+        <!-- Match the key used in SkillDetailFragment.ARG_SKILL_ID = "skill_id" -->
+        <argument
+            android:name="skill_id"
+            app:argType="string"
+            android:defaultValue="MINING" />
+    </fragment>
 
     <fragment
         android:id="@+id/nav_settings"
