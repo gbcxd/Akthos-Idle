@@ -15,9 +15,8 @@ import androidx.navigation.ui.NavigationUI;
 
 import com.example.akthosidle.data.repo.GameRepository;
 import com.example.akthosidle.databinding.ActivityMainBinding;
+
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-import com.google.gson.internal.GsonBuildConfig;
-// ✅ Import your app's BuildConfig
 
 import java.text.NumberFormat;
 import java.util.HashMap;

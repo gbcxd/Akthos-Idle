@@ -18,11 +18,9 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-    <include layout="@layout/currencies_strip" />
+        <include layout="@layout/currencies_strip" />
 
     </com.google.android.material.appbar.MaterialToolbar>
-
-
 
     <!-- NavHost -->
     <androidx.fragment.app.FragmentContainerView
