@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -9,25 +11,15 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- Title row -->
-        <TextView
-            android:id="@+id/tvTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Battle"
-            android:textAlignment="center"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:paddingBottom="8dp"/>
-
-        <!-- Enemy name / level -->
+        <!-- Enemy header -->
         <TextView
             android:id="@+id/tvEnemy"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Monster (Lvl 1)"
-            android:textSize="16sp"
-            android:paddingBottom="8dp"/>
+            android:text="Enemy"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:paddingBottom="8dp" />
 
         <!-- Enemy HP bar -->
         <LinearLayout
@@ -36,26 +28,20 @@
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Enemy"
-                android:layout_marginEnd="8dp"/>
-
             <ProgressBar
                 android:id="@+id/barEnemy"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="0dp"
-                android:layout_height="16dp"
+                android:layout_height="20dp"
                 android:layout_weight="1"
-                android:max="100"/>
+                android:max="100" />
 
             <TextView
                 android:id="@+id/tvEnemyPct"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="0%"
-                android:layout_marginStart="8dp"/>
+                android:paddingStart="8dp"
+                android:text="100%" />
         </LinearLayout>
 
         <!-- Player HP bar -->
@@ -66,57 +52,31 @@
             android:gravity="center_vertical"
             android:layout_marginTop="8dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="You"
-                android:layout_marginEnd="8dp"/>
-
             <ProgressBar
                 android:id="@+id/barPlayer"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="0dp"
-                android:layout_height="16dp"
+                android:layout_height="20dp"
                 android:layout_weight="1"
-                android:max="100"/>
+                android:max="100" />
 
             <TextView
                 android:id="@+id/tvPlayerPct"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="0%"
-                android:layout_marginStart="8dp"/>
+                android:paddingStart="8dp"
+                android:text="100%" />
         </LinearLayout>
 
-        <!-- Quick stats line -->
-        <LinearLayout
-            android:id="@+id/lineStats"
+        <!-- Atk / Def / Spd row (one label your fragment fills) -->
+        <TextView
+            android:id="@+id/tvStatsRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="12dp">
+            android:text=""
+            android:layout_marginTop="8dp" />
 
-            <TextView
-                android:id="@+id/tvAtk"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Atk 0"/>
-            <TextView
-                android:id="@+id/tvDef"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="   Def 0"
-                android:layout_marginStart="12dp"/>
-            <TextView
-                android:id="@+id/tvSpd"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="   Spd 0"
-                android:layout_marginStart="12dp"/>
-        </LinearLayout>
-
-        <!-- Fight toggle + auto respawn -->
+        <!-- Quick Heal + Fight + Auto -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -125,74 +85,94 @@
             android:layout_marginTop="12dp">
 
             <Button
-                android:id="@+id/btnFight"
+                android:id="@+id/btnQuickHeal"
                 android:layout_width="0dp"
-                android:layout_height="48dp"
                 android:layout_weight="1"
-                android:text="Fight"/>
+                android:layout_height="wrap_content"
+                android:text="Heal" />
+
+            <Button
+                android:id="@+id/btnFight"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:text="Fight" />
 
             <CheckBox
                 android:id="@+id/cbAutoRespawn"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Auto respawn"
-                android:layout_marginStart="12dp"/>
+                android:layout_marginStart="12dp"
+                android:text="Auto" />
         </LinearLayout>
 
-        <!-- Monster art placeholder -->
-        <ImageView
-            android:id="@+id/imgMonster"
-            android:layout_width="120dp"
-            android:layout_height="120dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="12dp"
-            android:contentDescription="monster"
-            android:src="@drawable/ic_shield"/>
-
-        <!-- Loot panel -->
-        <LinearLayout
-            android:id="@+id/panelLoot"
+        <!-- Combat log -->
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/slot_background"
-            android:padding="12dp">
+            android:text="Combat log"
+            android:textStyle="bold"
+            android:layout_marginTop="12dp" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Loot"
-                android:textStyle="bold"
-                android:textSize="16sp"
-                android:paddingBottom="6dp"/>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvLoot"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:nestedScrollingEnabled="false"/>
-
-            <TextView
-                android:id="@+id/tvNoLoot"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="No loot yet."
-                android:paddingTop="4dp"
-                android:visibility="gone"/>
-
-            <Button
-                android:id="@+id/btnCollect"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:text="Collect Loot"
-                android:layout_marginTop="8dp"
-                android:enabled="false"/>
-        </LinearLayout>
-
-        <!-- spacer so bottom nav never overlaps -->
-        <Space
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvCombatLog"
             android:layout_width="match_parent"
-            android:layout_height="64dp"/>
+            android:layout_height="120dp"
+            android:overScrollMode="never" />
+
+        <!-- Loot header -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Loot"
+            android:textStyle="bold"
+            android:layout_marginTop="12dp" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvLoot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:nestedScrollingEnabled="false" />
+
+        <TextView
+            android:id="@+id/tvNoLoot"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="(No loot)"
+            android:visibility="gone"
+            android:layout_marginTop="6dp" />
+
+        <Button
+            android:id="@+id/btnCollect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Collect"
+            android:enabled="false"
+            android:layout_marginTop="8dp" />
+
+        <!-- Optional monster image placeholder -->
+        <ImageView
+            android:id="@+id/imgMonster"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+
+        <!-- Legacy placeholders (still referenced in older code paths) -->
+        <TextView
+            android:id="@+id/tvAtk"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+        <TextView
+            android:id="@+id/tvDef"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+        <TextView
+            android:id="@+id/tvSpd"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+
     </LinearLayout>
-</ScrollView>
+</androidx.core.widget.NestedScrollView>

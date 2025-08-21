@@ -46,7 +46,7 @@ public class FoodPickerDialog extends DialogFragment implements FoodAdapter.OnFo
 
     @Override
     public void onFoodSelected(InventoryItem item) {
-        vm.setQuickFood(item.id);
+        List<InventoryItem> foods = vm.getFoodItems();
         dismiss();
     }
 }

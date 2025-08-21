@@ -122,9 +122,12 @@ public class CombatEngine {
         s.running = true;
         state.setValue(s);
 
-        // clear log at start
+        // Clear log at start
         logClear();
         logLine("Encounter started: " + s.monsterName);
+
+        // ✅ Authoritative flag: battle is active
+        repo.startBattle();
 
         pTimer = mTimer = 0;
         lastTickMs = SystemClock.uptimeMillis();
@@ -144,6 +147,9 @@ public class CombatEngine {
             pc.currentHp = s.playerHp;
             repo.save();
         }
+
+        // ✅ Authoritative flag: battle ended
+        repo.stopBattle();
     }
 
     private void loop() {
@@ -177,7 +183,7 @@ public class CombatEngine {
             s.monsterHp = Math.max(0, s.monsterHp - res.dmg);
             logLine("You hit " + s.monsterName + " for " + res.dmg + (res.crit ? " (CRIT!)" : ""));
 
-            // +1 Attack XP per hit
+            // Example: track a bit of Attack XP per swing (optional, keep if you like)
             repo.addSkillExp(com.example.akthosidle.domain.model.SkillId.ATTACK, 1);
 
             // 🔥 Try to apply/refresh Burn on monster
@@ -217,7 +223,8 @@ public class CombatEngine {
                     clamp01(mStats.critChance), Math.max(1.0, mStats.critMultiplier));
             s.playerHp = Math.max(0, s.playerHp - res.dmg);
             logLine(s.monsterName + " hits you for " + res.dmg + (res.crit ? " (CRIT!)" : ""));
-            // +1 Defense XP when hit
+
+            // Example: track a bit of Defense XP per enemy hit (optional)
             repo.addSkillExp(com.example.akthosidle.domain.model.SkillId.DEFENSE, 1);
         }
 
@@ -232,6 +239,10 @@ public class CombatEngine {
             }
             if (pc != null) pc.currentHp = s.playerHp;
             repo.save();
+
+            // ✅ Authoritative flag: end battle immediately for UI (FAB visibility, etc.)
+            repo.stopBattle();
+
             // progress/intervals for final frame
             s.playerAttackProgress = (float) Math.min(1.0, pTimer / pAtkItv);
             s.monsterAttackProgress = (float) Math.min(1.0, mTimer / mAtkItv);
@@ -274,20 +285,18 @@ public class CombatEngine {
     private void grantRewards(PlayerCharacter pc, Monster m) {
         if (pc == null || m == null) return;
 
-        // XP (toast + track XP/h)
-        int xp = Math.max(0, m.expReward);
-        repo.addPlayerExp(xp);
-
-        // Gold as currency (updates toolbar)
-        if (m.goldReward > 0) {
-            repo.addCurrency("gold", m.goldReward);
+        // ✅ XP via repo (toast + XP/h tracker)
+        if (m.expReward > 0) {
+            repo.addPlayerExp(m.expReward);
         }
 
-        // Log rewards line
-        String rewards = "Rewards: +" + xp + " XP" + (m.goldReward > 0 ? (", +" + m.goldReward + " gold") : "");
-        logLine(rewards);
+        // ✅ Currency: treat as SILVER (pending; shows in toolbar after collect)
+        // If your Monster has a dedicated silver field later, swap to it.
+        if (m.silverReward > 0) {
+            repo.addPendingCurrency("silver", "Silver", m.silverReward);
+        }
 
-        // --- DROPS ---
+        // --- Item DROPS ---
         List<Drop> drops = m.drops;
         if (drops != null) {
             for (Drop d : drops) {

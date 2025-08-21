@@ -115,8 +115,6 @@ public class MainActivity extends AppCompatActivity {
         NavigationUI.setupWithNavController(bottomNav, navController);
         bottomNav.setOnItemReselectedListener(item -> { /* no-op */ });
 
-        repo.gatheringLive.observe(this, isOn -> setGatheringActive(Boolean.TRUE.equals(isOn)));
-
         // XP/hour mini-panel wiring
         setupXpUi();
 
@@ -128,17 +126,10 @@ public class MainActivity extends AppCompatActivity {
         navController.addOnDestinationChangedListener((controller, destination, args) -> {
             updateXpFabForDestination(destination);
         });
-    }
 
-    private boolean labelStartsWithAny(@Nullable NavDestination dest, String... prefixes) {
-        if (dest == null) return false;
-        CharSequence lbl = dest.getLabel();
-        if (lbl == null) return false;
-        String s = lbl.toString().trim().toLowerCase(Locale.US);
-        for (String p : prefixes) {
-            if (s.startsWith(p.toLowerCase(Locale.US))) return true;
-        }
-        return false;
+        // Also react when repo flags change (battle/gather toggles)
+        repo.battleLive.observe(this, b -> updateXpFabForDestination(navController.getCurrentDestination()));
+        repo.gatheringLive.observe(this, g -> updateXpFabForDestination(navController.getCurrentDestination()));
     }
 
     // ===== Dev overflow menu =====
@@ -258,52 +249,19 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ===== Destination helpers to avoid hard-coded R.id.* names =====
-
-    /** Resolve an R.id.* by name at runtime; returns 0 if not found. */
-    private int idByName(String name) {
-        return getResources().getIdentifier(name, "id", getPackageName());
-    }
-
-    private boolean idMatchesAny(int id, String... candidates) {
-        for (String name : candidates) {
-            int resId = idByName(name);
-            if (resId != 0 && id == resId) return true;
-        }
-        return false;
-    }
-
-    private boolean labelIsOneOf(@Nullable NavDestination dest, String... labels) {
-        if (dest == null) return false;
-        CharSequence lbl = dest.getLabel();
-        if (lbl == null) return false;
-        String s = lbl.toString().trim().toLowerCase(Locale.US);
-        for (String want : labels) {
-            if (s.equals(want.toLowerCase(Locale.US))) return true;
-        }
-        return false;
-    }
-
-    /** Decide whether to show FAB on this destination. */
+    /** Decide whether to show FAB on this destination without hard-coding R.id.* */
     private void updateXpFabForDestination(@Nullable NavDestination dest) {
         if (dest == null) return;
         int id = dest.getId();
+        String entry = "";
+        try { entry = getResources().getResourceEntryName(id); } catch (Throwable ignored) {}
+        String label = dest.getLabel() != null ? dest.getLabel().toString().toLowerCase(Locale.US) : "";
 
-        boolean onBattle =
-                idMatchesAny(id, "battleFragment", "nav_battle", "battle")
-                        || labelIsOneOf(dest, "Battle");
+        boolean onBattle = entry.toLowerCase(Locale.US).contains("battle") || label.contains("battle");
+        boolean onSkills = entry.toLowerCase(Locale.US).contains("skill")  || label.contains("skill");
 
-        // Treat both the list and the detail screen as "skills context"
-        boolean onSkills =
-                idMatchesAny(id, "skillsFragment", "skillDetailFragment", "nav_skills", "nav_skill_detail", "skillDetail")
-                        || labelIsOneOf(dest, "Skills")
-                        || labelStartsWithAny(dest,
-                        "woodcutting", "mining", "fishing", "gathering", "hunting",
-                        "crafting", "smithing", "cooking", "alchemy", "tailoring",
-                        "carpentry", "enchanting", "community", "harvesting");
-
-        boolean show = (onBattle && repo.isBattleActive()) || (onSkills && gatheringActive);
+        boolean show = onBattle || (onSkills && gatheringActive);
         setXpFabVisible(show);
-        if (!show) setXpPanelVisible(false);
+        if (!show) setXpPanelVisible(false); // auto-hide panel when FAB hides
     }
 }
