@@ -718,6 +718,9 @@ public class GameRepository {
         Toast.makeText(app, msg, Toast.LENGTH_SHORT).show();
     }
 
+    public boolean isBattleActive() {
+    }
+
     public static class PendingLoot {
         public String id;        // e.g. "iron_ore" OR "currency:silver"
         public String name;      // display label, e.g. "Silver"

@@ -25,6 +25,8 @@ import com.example.akthosidle.domain.model.PlayerCharacter;
 import com.example.akthosidle.domain.model.SkillId;
 import com.example.akthosidle.engine.ActionEngine;
 
+import androidx.lifecycle.MutableLiveData;
+
 
 
 import java.util.ArrayList;
@@ -41,6 +43,8 @@ public class SkillDetailFragment extends Fragment {
 
     private GameRepository repo;
     private ActionEngine engine;
+
+    public final MutableLiveData<Boolean> battleLive = new MutableLiveData<>(false);
 
     private SkillId skillId;
     private Action selectedAction;
@@ -267,5 +271,19 @@ public class SkillDetailFragment extends Fragment {
 
         @Override
         public int getItemCount() { return list.size(); }
+    }
+
+    public boolean isBattleActive() {
+        Boolean v = battleLive.getValue();
+        return v != null && v;
+    }
+
+
+    public void setBattleActive(boolean active) {
+        Boolean cur = battleLive.getValue();
+        if (cur == null || cur != active) {
+            // use postValue if calling from a background thread
+            battleLive.setValue(active);
+        }
     }
 }

@@ -115,6 +115,8 @@ public class MainActivity extends AppCompatActivity {
         NavigationUI.setupWithNavController(bottomNav, navController);
         bottomNav.setOnItemReselectedListener(item -> { /* no-op */ });
 
+        repo.gatheringLive.observe(this, isOn -> setGatheringActive(Boolean.TRUE.equals(isOn)));
+
         // XP/hour mini-panel wiring
         setupXpUi();
 
@@ -126,6 +128,17 @@ public class MainActivity extends AppCompatActivity {
         navController.addOnDestinationChangedListener((controller, destination, args) -> {
             updateXpFabForDestination(destination);
         });
+    }
+
+    private boolean labelStartsWithAny(@Nullable NavDestination dest, String... prefixes) {
+        if (dest == null) return false;
+        CharSequence lbl = dest.getLabel();
+        if (lbl == null) return false;
+        String s = lbl.toString().trim().toLowerCase(Locale.US);
+        for (String p : prefixes) {
+            if (s.startsWith(p.toLowerCase(Locale.US))) return true;
+        }
+        return false;
     }
 
     // ===== Dev overflow menu =====
@@ -276,17 +289,21 @@ public class MainActivity extends AppCompatActivity {
         if (dest == null) return;
         int id = dest.getId();
 
-        // Try common ID names; tweak these strings to your actual nav_graph IDs if needed.
         boolean onBattle =
-                idMatchesAny(id, "battleFragment", "nav_battle", "battle") ||
-                        labelIsOneOf(dest, "Battle");
+                idMatchesAny(id, "battleFragment", "nav_battle", "battle")
+                        || labelIsOneOf(dest, "Battle");
 
+        // Treat both the list and the detail screen as "skills context"
         boolean onSkills =
-                idMatchesAny(id, "skillsFragment", "nav_skills", "skills") ||
-                        labelIsOneOf(dest, "Skills");
+                idMatchesAny(id, "skillsFragment", "skillDetailFragment", "nav_skills", "nav_skill_detail", "skillDetail")
+                        || labelIsOneOf(dest, "Skills")
+                        || labelStartsWithAny(dest,
+                        "woodcutting", "mining", "fishing", "gathering", "hunting",
+                        "crafting", "smithing", "cooking", "alchemy", "tailoring",
+                        "carpentry", "enchanting", "community", "harvesting");
 
-        boolean show = onBattle || (onSkills && gatheringActive);
+        boolean show = (onBattle && repo.isBattleActive()) || (onSkills && gatheringActive);
         setXpFabVisible(show);
-        if (!show) setXpPanelVisible(false); // auto-hide panel when FAB hides
+        if (!show) setXpPanelVisible(false);
     }
 }
