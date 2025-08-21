@@ -127,6 +127,7 @@ public class SkillsFragment extends Fragment {
         }
     }
 
+
     @Override
     public void onDestroyView() {
         super.onDestroyView();

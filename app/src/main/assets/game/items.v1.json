@@ -1,25 +1,20 @@
-[
-  {
-    "id": "ore_copper",
-    "name": "Copper Ore",
-    "icon": "ic_ore_copper",
-    "type": "RESOURCE",
-    "rarity": "COMMON"
-  },
-  {
-    "id": "fish_shrimp",
-    "name": "Raw Shrimp",
-    "icon": "ic_fish_shrimp",
-    "type": "RESOURCE",
-    "rarity": "COMMON"
-  },
-  {
-    "id": "wpn_rusty_sword",
-    "name": "Rusty Sword",
-    "icon": "ic_sword",
-    "type": "EQUIPMENT",
-    "slot": "WEAPON",
-    "rarity": "COMMON",
-    "stats": { "attack": 3, "defense": 0, "speed": 0.0, "health": 0, "critChance": 0.0, "critMultiplier": 0.0 }
-  }
-]
+{
+  "version": 1,
+  "items": [
+    { "id": "copper_ore",    "name": "Copper Ore",     "type": "resource" },
+    { "id": "logs",          "name": "Logs",           "type": "resource" },
+    { "id": "fish_raw",      "name": "Raw Fish",       "type": "food" },
+    { "id": "herb_leaf",     "name": "Herb Leaf",      "type": "herb" },
+    { "id": "rabbit_meat",   "name": "Rabbit Meat",    "type": "food" },
+    { "id": "fur",           "name": "Animal Fur",     "type": "material" },
+    { "id": "leather_boots", "name": "Leather Boots",  "type": "equipment" },
+    { "id": "copper_bar",    "name": "Copper Bar",     "type": "resource" },
+    { "id": "fish_cooked",   "name": "Cooked Fish",    "type": "food" },
+    { "id": "potion_minor",  "name": "Minor Potion",   "type": "consumable" },
+    { "id": "cloth_hood",    "name": "Cloth Hood",     "type": "equipment" },
+    { "id": "wooden_bow",    "name": "Wooden Bow",     "type": "weapon" },
+    { "id": "enchanted_staff","name": "Enchanted Staff","type": "weapon" },
+    { "id": "favor_token",   "name": "Favor Token",    "type": "currency" },
+    { "id": "wheat",         "name": "Wheat",          "type": "resource" }
+  ]
+}

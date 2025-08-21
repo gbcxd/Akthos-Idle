@@ -167,14 +167,25 @@ public class SkillDetailFragment extends Fragment {
     private void openActionPicker() {
         List<Action> all = repo.getActionsBySkill(skillId);
         int level = repo.loadOrCreatePlayer().getSkillLevel(skillId);
+
+        // Filter unlocked
         List<Action> unlocked = new ArrayList<>();
         for (Action a : all) {
             if (a != null && a.reqLevel <= level) unlocked.add(a);
         }
+
+        if (unlocked.isEmpty()) {
+            // No actions available → show placeholder
+            tvStatus.setText(getString(R.string.no_actions_available));
+            return;
+        }
+
         ActionPickerDialog dlg = ActionPickerDialog.newInstance(unlocked, action -> {
             selectedAction = action;
             tvSelectedAction.setText(action.name);
-            tvActionReq.setText(getString(R.string.req_and_duration_fmt, action.reqLevel, action.durationMs / 1000));
+            tvActionReq.setText(
+                    getString(R.string.req_and_duration_fmt, action.reqLevel, action.durationMs / 1000)
+            );
             // TODO: set icon when Action has icon resource
             // btnPickAction.setImageResource(action.iconRes);
         });

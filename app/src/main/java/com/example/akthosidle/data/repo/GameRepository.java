@@ -10,7 +10,6 @@ import androidx.lifecycle.MutableLiveData;
 
 import com.example.akthosidle.data.dtos.InventoryItem;
 import com.example.akthosidle.domain.model.Action;
-import com.example.akthosidle.domain.model.Drop;
 import com.example.akthosidle.domain.model.EquipmentSlot;
 import com.example.akthosidle.domain.model.Item;
 import com.example.akthosidle.domain.model.Monster;
@@ -19,6 +18,9 @@ import com.example.akthosidle.domain.model.SkillId;
 import com.example.akthosidle.domain.model.Stats;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.io.InputStream;
 import java.lang.reflect.Type;
@@ -36,6 +38,10 @@ public class GameRepository {
     private static final String KEY_PLAYER = "player_json";
     private static final String KEY_LAST_SEEN = "last_seen_ms";
 
+    private static final String ASSET_ITEMS    = "game/items.v1.json";
+    private static final String ASSET_ACTIONS  = "game/actions.v1.json";
+    private static final String ASSET_MONSTERS = "game/monsters.v1.json";
+
     private final Context app;
     private final SharedPreferences sp;
     private final Gson gson = new Gson();
@@ -43,18 +49,14 @@ public class GameRepository {
     // Definitions
     public final Map<String, Item> items = new HashMap<>();
     private final Map<String, Monster> monsters = new HashMap<>();
-
-    // Actions (progression content)
     private final Map<String, Action> actions = new HashMap<>();
 
     // Runtime save
     private PlayerCharacter player;
 
-    // Live currency balances for top bar
+    // Live data
     public final MutableLiveData<Map<String, Long>> currencyLive =
             new MutableLiveData<>(new HashMap<>());
-
-    // Live HP for UI (e.g., health bar / label)
     public final MutableLiveData<Integer> playerHpLive = new MutableLiveData<>();
 
     public GameRepository(Context appContext) {
@@ -63,78 +65,83 @@ public class GameRepository {
     }
 
     /* =========================================================
-     * Load static definitions (items / monsters).
+     * Load static definitions (items / monsters / actions).
      * ========================================================= */
     public void loadDefinitions() {
-        if (!items.isEmpty() || !monsters.isEmpty()) return;
+        if (!items.isEmpty() || !monsters.isEmpty()) {
+            // actions can still be empty on cold start; ensure loaded too
+            if (actions.isEmpty()) loadActionsFromAssets();
+            return;
+        }
 
-        loadItemsFromAssets();     // game/items.v1.json
-        loadMonstersFromAssets();  // game/monsters.v1.json
-        loadActionsFromAssets();  // game/actions.v1.json
+        loadItemsFromAssets();     // assets/game/items.v1.json
+        loadMonstersFromAssets();  // assets/game/monsters.v1.json
+        loadActionsFromAssets();   // assets/game/actions.v1.json
 
-        // No hardcoded defaults here. If files are missing or empty,
-        // the maps will remain empty and UI should handle that state gracefully.
+        // Intentionally no hardcoded defaults here. Keep JSON in assets.
     }
 
-    /** Load Actions from assets; call once on startup (e.g., Application or first screen). */
+    /** Load Actions from assets; call once on startup. */
     public void loadActionsFromAssets() {
         if (!actions.isEmpty()) return; // already loaded
-
-        try (InputStream is = app.getAssets().open("game/actions.v1.json")) {
-            String json = readStream(is); // works on API 24+
+        try (InputStream is = app.getAssets().open(ASSET_ACTIONS)) {
+            String json = readStream(is);
             Type t = new TypeToken<List<Action>>() {}.getType();
             List<Action> list = gson.fromJson(json, t);
             if (list != null) {
                 for (Action a : list) {
-                    if (a != null && a.id != null) {
-                        actions.put(a.id, a);
-                    }
+                    if (a != null && a.id != null) actions.put(a.id, a);
                 }
             }
-        } catch (Exception e) {
-            // Keep empty if file is missing/corrupt; UI should handle no actions gracefully.
-            // Optionally log/Toast in debug builds.
-            // toast("Actions file not found: game/actions.v1.json");
+        } catch (Exception ignored) {
+            // Keep empty; UI should handle gracefully.
         }
     }
 
     /** Load Items from assets/game/items.v1.json (if present). */
-    private void loadItemsFromAssets() {
-        AssetManager am = app.getAssets();
-        try (InputStream is = am.open("game/items.v1.json")) {
+    public void loadItemsFromAssets() {
+        if (!items.isEmpty()) return; // already loaded / restored
+        try (InputStream is = app.getAssets().open(ASSET_ITEMS)) {
             String json = readStream(is);
-            Type t = new TypeToken<List<Item>>() {}.getType();
-            List<Item> list = gson.fromJson(json, t);
-            if (list != null) {
-                for (Item it : list) {
-                    if (it != null && it.id != null) {
-                        items.put(it.id, it);
-                    }
+            JSONObject root = new JSONObject(json);
+            JSONArray arr = root.optJSONArray("items");
+            if (arr != null) {
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject o = arr.optJSONObject(i);
+                    if (o == null) continue;
+                    String id = o.optString("id", null);
+                    if (id == null || id.isEmpty()) continue;
+
+                    Item it = new Item();
+                    it.id     = id;
+                    it.name   = o.optString("name", id);
+                    it.type   = o.optString("type", "resource");
+                    it.icon   = o.optString("icon", null);
+                    it.slot   = o.optString("slot", null);
+                    it.rarity = o.optString("rarity", null);
+                    if (o.has("heal")) it.heal = o.optInt("heal");
+
+                    items.put(id, it);
                 }
             }
-        } catch (Exception e) {
-            // Safe fallback: keep empty. Optionally log or toast once in debug.
-            // toast("Items file not found (game/items.v1.json). Using empty items.");
+        } catch (Exception ignored) {
+            // If file missing/malformed, keep empty. UI should handle.
         }
     }
 
     /** Load Monsters from assets/game/monsters.v1.json (if present). */
     private void loadMonstersFromAssets() {
-        AssetManager am = app.getAssets();
-        try (InputStream is = am.open("game/monsters.v1.json")) {
+        try (InputStream is = app.getAssets().open(ASSET_MONSTERS)) {
             String json = readStream(is);
             Type t = new TypeToken<List<Monster>>() {}.getType();
             List<Monster> list = gson.fromJson(json, t);
             if (list != null) {
                 for (Monster m : list) {
-                    if (m != null && m.id != null) {
-                        monsters.put(m.id, m);
-                    }
+                    if (m != null && m.id != null) monsters.put(m.id, m);
                 }
             }
-        } catch (Exception e) {
-            // Safe fallback: keep empty. Optionally log or toast once in debug.
-            // toast("Monsters file not found (game/monsters.v1.json). Using empty monsters.");
+        } catch (Exception ignored) {
+            // Keep empty.
         }
     }
 
@@ -160,22 +167,21 @@ public class GameRepository {
                 save();
             }
             publishCurrencies();
-            publishHp(); // NEW: update HP observers
+            publishHp();
             return player;
         }
 
-        // Create new player
+        // New player
         player = new PlayerCharacter();
         player.normalizeCurrencies();
 
-        // Starter inventory
+        // Starter kit (safe defaults; items must exist in items map to be meaningful)
         addToBag("wpn_rusty_sword", 1);
         addToBag("helm_leather_cap", 1);
-        addToBag("food_apple", 1000);
+        addToBag("food_apple", 5);
         addToBag("pot_basic_combat", 2);
         addToBag("pot_basic_noncombat", 2);
-        addToBag("syrup_basic", 1000);
-        addToBag("pot_heal_small", 1000);
+        addToBag("syrup_basic", 1);
 
         // First-time HP init to max
         if (player.currentHp == null) {
@@ -185,7 +191,7 @@ public class GameRepository {
 
         save();
         publishCurrencies();
-        publishHp(); // NEW
+        publishHp();
         return player;
     }
 
@@ -234,18 +240,18 @@ public class GameRepository {
         for (Map.Entry<EquipmentSlot, String> e : pc.equipment.entrySet()) {
             Item it = getItem(e.getValue());
             if (it != null && it.stats != null) {
-                sum.attack     += it.stats.attack;
-                sum.defense    += it.stats.defense;
-                sum.speed      += it.stats.speed;
-                sum.health     += it.stats.health;
-                sum.critChance += it.stats.critChance;
+                sum.attack        += it.stats.attack;
+                sum.defense       += it.stats.defense;
+                sum.speed         += it.stats.speed;
+                sum.health        += it.stats.health;
+                sum.critChance    += it.stats.critChance;
                 sum.critMultiplier = Math.max(sum.critMultiplier, it.stats.critMultiplier);
             }
         }
         return sum;
     }
 
-    /** Current total stats = base + gear (matches PlayerCharacter.totalStats usage). */
+    /** Current total stats = base + gear. */
     public Stats totalStats() {
         PlayerCharacter pc = loadOrCreatePlayer();
         return pc.totalStats(gearStats(pc));
@@ -257,7 +263,7 @@ public class GameRepository {
     }
 
     /* ============================
-     * Food & Potions API (matches UI)
+     * Food & Potions API
      * ============================ */
 
     /** Food = CONSUMABLE with heal > 0. */
@@ -269,14 +275,12 @@ public class GameRepository {
             String id = e.getKey();
             int qty = e.getValue();
             Item it = getItem(id);
-            if (isFood(it)) list.add(new InventoryItem(id, it.name, qty));
+            if (isFood(it)) list.add(new InventoryItem(id, it != null ? it.name : id, qty));
         }
         return list;
     }
 
-    /**
-     * Potions = CONSUMABLE that are NOT food.
-     */
+    /** Potions = CONSUMABLE that are NOT food. */
     public List<InventoryItem> getPotions(boolean combatOnly, boolean nonCombatOnly) {
         List<InventoryItem> list = new ArrayList<>();
         PlayerCharacter pc = loadOrCreatePlayer();
@@ -293,7 +297,7 @@ public class GameRepository {
             if (combatOnly && !isCombat) continue;
             if (nonCombatOnly && !isNonCombat) continue;
 
-            list.add(new InventoryItem(id, it.name, qty));
+            list.add(new InventoryItem(id, it != null ? it.name : id, qty));
         }
         return list;
     }
@@ -326,7 +330,7 @@ public class GameRepository {
         if (pc.bag.get(potionId) != null && pc.bag.get(potionId) <= 0) pc.bag.remove(potionId);
 
         save();
-        publishHp(); // notify UI about HP change
+        publishHp();
     }
 
     /** Consume "syrup": heal if it has a heal value, otherwise apply a small speed buff. */
@@ -373,12 +377,12 @@ public class GameRepository {
                 if (pc.bag.get(syrupId) != null && pc.bag.get(syrupId) <= 0) pc.bag.remove(syrupId);
             }
             save();
-            publishHp(); // notify UI in case HP changed
+            publishHp();
         }
     }
 
     /* ============================
-     * Generic bag listing (optional helper)
+     * Generic bag listing
      * ============================ */
     public List<InventoryItem> getBagAsList() {
         List<InventoryItem> list = new ArrayList<>();
@@ -439,10 +443,7 @@ public class GameRepository {
      * Pending loot (buffer + LiveData)
      * ============================ */
 
-    // Internal buffer of pending loot (supports items & currencies)
     private final List<PendingLoot> pendingLoot = new ArrayList<>();
-
-    // Live list for UI that shows items only (non-currency) as InventoryItem
     public final MutableLiveData<List<InventoryItem>> pendingLootLive =
             new MutableLiveData<>(new ArrayList<>());
 
@@ -528,7 +529,8 @@ public class GameRepository {
     }
 
     public synchronized void collectPendingLoot(PlayerCharacter pc) {
-        List<InventoryItem> cur = new ArrayList<>(pendingLootLive.getValue());
+        List<InventoryItem> cur = pendingLootLive.getValue();
+        if (cur == null) cur = new ArrayList<>();
         for (InventoryItem it : cur) {
             pc.addItem(it.id, it.quantity);
         }
@@ -628,6 +630,7 @@ public class GameRepository {
         public boolean isCurrency;
     }
 
+    /** Dev helper to grant items. */
     public void giveItem(String itemId, int qty) {
         if (itemId == null || qty == 0) return;
         PlayerCharacter pc = loadOrCreatePlayer();
