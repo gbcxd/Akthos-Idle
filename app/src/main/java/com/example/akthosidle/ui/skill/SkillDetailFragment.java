@@ -99,6 +99,8 @@ public class SkillDetailFragment extends Fragment {
                 startLoop();
             }
         });
+
+
     }
 
     private void startLoop() {

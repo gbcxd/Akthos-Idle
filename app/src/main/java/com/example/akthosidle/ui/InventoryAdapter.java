@@ -20,109 +20,115 @@ import java.util.List;
 import java.util.Map;
 
 public class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
+
     public interface OnItemClick { void onItemClick(String itemId); }
+
+    /** Visible filter buckets. */
+    public enum Filter { ALL, MATERIAL, FOOD, POTION, EQUIPMENT, OTHER }
 
     private final GameRepository repo;
     private final OnItemClick cb;
+
+    private final List<String> allIds = new ArrayList<>();
+    private final List<Integer> allQtys = new ArrayList<>();
+
     private final List<String> ids = new ArrayList<>();
     private final List<Integer> qtys = new ArrayList<>();
 
-    public InventoryAdapter(@NonNull GameRepository repo,
-                            @NonNull Map<String, Integer> bag,
-                            @NonNull OnItemClick cb) {
-        this.repo = repo;
-        this.cb = cb;
-        refresh(bag);
-        setHasStableIds(true);
+    private Filter filter = Filter.ALL;
+
+    public InventoryAdapter(GameRepository repo, Map<String,Integer> bag, OnItemClick cb) {
+        this.repo = repo; this.cb = cb; refresh(bag);
     }
 
-    public void refresh(@NonNull Map<String, Integer> bag) {
-        ids.clear();
-        qtys.clear();
-        for (Map.Entry<String, Integer> e : bag.entrySet()) {
-            if (e.getKey() == null) continue;
-            ids.add(e.getKey());
-            qtys.add(e.getValue() == null ? 0 : e.getValue());
+    public void refresh(Map<String,Integer> bag) {
+        allIds.clear(); allQtys.clear();
+        if (bag != null) {
+            for (Map.Entry<String,Integer> e : bag.entrySet()) {
+                allIds.add(e.getKey());
+                allQtys.add(e.getValue());
+            }
+        }
+        applyFilter();
+    }
+
+    public void setFilter(Filter f) {
+        this.filter = (f == null) ? Filter.ALL : f;
+        applyFilter();
+    }
+
+    private void applyFilter() {
+        ids.clear(); qtys.clear();
+        for (int i = 0; i < allIds.size(); i++) {
+            String id = allIds.get(i);
+            int q = allQtys.get(i);
+            Item it = repo.getItem(id);
+            if (passes(it, filter)) {
+                ids.add(id);
+                qtys.add(q);
+            }
         }
         notifyDataSetChanged();
     }
 
-    @Override
-    public long getItemId(int position) {
-        // Helps RecyclerView animations; hash of ID string is fine here
-        return ids.get(position).hashCode();
+    private boolean passes(Item it, Filter f) {
+        if (f == Filter.ALL) return true;
+        if (it == null) return f == Filter.OTHER;
+
+        final String type = (it.type == null) ? "" : it.type.toUpperCase();
+        final boolean isFood = it.heal != null && it.heal > 0;
+        final boolean isPotion = "CONSUMABLE".equals(type) && !isFood;
+        final boolean isEquip = "EQUIPMENT".equals(type);
+        final boolean isMaterial = TextUtils.isEmpty(type) ||
+                "RESOURCE".equals(type) || "MATERIAL".equals(type) || "ORE".equals(type);
+
+        switch (f) {
+            case FOOD: return isFood;
+            case POTION: return isPotion;
+            case EQUIPMENT: return isEquip;
+            case MATERIAL: return isMaterial && !isFood && !isPotion && !isEquip;
+            case OTHER: default:
+                return !(isFood || isPotion || isEquip || isMaterial);
+        }
     }
 
-    @NonNull
-    @Override
-    public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View v = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.row_inventory, parent, false);
+    @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.row_inventory, parent, false);
         return new VH(v);
     }
 
-    @Override
-    public void onBindViewHolder(@NonNull VH h, int pos) {
-        String id = ids.get(pos);
-        int q = qtys.get(pos);
-
+    @Override public void onBindViewHolder(@NonNull VH h, int pos) {
+        String id = ids.get(pos); int q = qtys.get(pos);
         Item it = repo.getItem(id);
 
-        // --- title & qty (null-safe) ---
-        String title = (it != null && !TextUtils.isEmpty(it.name))
-                ? it.name
-                : (id != null ? id : h.itemView.getContext().getString(R.string.app_name)); // fallback
-        h.name.setText(title);
-        h.qty.setText("x" + Math.max(0, q));
+        // name & quantity (safe fallbacks)
+        h.name.setText(it != null && it.name != null ? it.name : id);
+        h.qty.setText("x" + q);
 
-        // --- icon resolve (null-safe with fallbacks) ---
+        // icon resolution (safe fallback)
         Context ctx = h.itemView.getContext();
-        String iconName = (it != null) ? it.icon : null;
-        int iconRes = resolveIcon(ctx, iconName, id);
-        h.icon.setImageResource(iconRes);
+        String iconName = (it != null ? it.icon : null);
+        int resId = 0;
+        if (iconName != null && !iconName.isEmpty()) {
+            resId = ctx.getResources().getIdentifier(iconName, "drawable", ctx.getPackageName());
+        }
+        if (resId == 0) resId = R.drawable.ic_bag; // fallback
+        h.icon.setImageResource(resId);
 
-        // --- click ---
         h.itemView.setOnClickListener(v -> {
-            if (cb != null && id != null) cb.onItemClick(id);
+            if (cb != null) cb.onItemClick(id);
         });
     }
 
-    @Override
-    public int getItemCount() { return ids.size(); }
+    @Override public int getItemCount() { return ids.size(); }
 
     static class VH extends RecyclerView.ViewHolder {
-        final ImageView icon;
-        final TextView name;
-        final TextView qty;
-        VH(@NonNull View v) {
+        ImageView icon; TextView name; TextView qty;
+        VH(View v) {
             super(v);
             icon = v.findViewById(R.id.icon);
             name = v.findViewById(R.id.name);
             qty  = v.findViewById(R.id.qty);
         }
-    }
-
-    /**
-     * Resolve a drawable resource id from an optional icon name.
-     * Falls back to a convention guess ("ic_" + sanitizedId) and finally to a placeholder.
-     */
-    private int resolveIcon(@NonNull Context ctx, String iconName, String fallbackId) {
-        // 1) if JSON provided an explicit icon name like "ic_ore_copper"
-        if (!TextUtils.isEmpty(iconName)) {
-            int id = ctx.getResources().getIdentifier(iconName.trim(), "drawable", ctx.getPackageName());
-            if (id != 0) return id;
-        }
-
-        // 2) try a convention-based name derived from item id (e.g., "ic_pot_heal_small")
-        if (!TextUtils.isEmpty(fallbackId)) {
-            String sanitized = fallbackId.toLowerCase().replaceAll("[^a-z0-9_]", "_");
-            String guess = "ic_" + sanitized;
-            int id = ctx.getResources().getIdentifier(guess, "drawable", ctx.getPackageName());
-            if (id != 0) return id;
-        }
-
-        // 3) final fallback placeholder
-        // Use whatever you already have — keeping ic_bag since it exists in your project.
-        return R.drawable.ic_bag;
     }
 }
