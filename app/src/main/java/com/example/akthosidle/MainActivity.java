@@ -6,6 +6,7 @@ import android.os.Looper;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;              // <-- NEW
 import android.widget.ImageButton;
 import android.widget.TextView;
 
@@ -115,6 +116,9 @@ public class MainActivity extends AppCompatActivity {
         NavigationUI.setupWithNavController(bottomNav, navController);
         bottomNav.setOnItemReselectedListener(item -> { /* no-op */ });
 
+        // Attach long-press to the Skills tab
+        attachSkillsLongPress(bottomNav);
+
         // XP/hour mini-panel wiring
         setupXpUi();
 
@@ -122,7 +126,7 @@ public class MainActivity extends AppCompatActivity {
         setXpFabVisible(false);
         setXpPanelVisible(false);
 
-        // 🔁 Show FAB only on Battle OR (Skills & gatheringActive)
+        // Show FAB only on Battle OR (Skills & gatheringActive)
         navController.addOnDestinationChangedListener((controller, destination, args) -> {
             updateXpFabForDestination(destination);
         });
@@ -263,5 +267,64 @@ public class MainActivity extends AppCompatActivity {
         boolean show = onBattle || (onSkills && gatheringActive);
         setXpFabVisible(show);
         if (!show) setXpPanelVisible(false); // auto-hide panel when FAB hides
+    }
+
+    // ===== Long-press wiring for the Skills tab =====
+    private void attachSkillsLongPress(BottomNavigationView bn) {
+        // Try to attach to the actual Skills menu item’s view
+        bn.post(() -> {
+            ViewGroup menuView = (ViewGroup) bn.getChildAt(0);
+            boolean attached = false;
+            if (menuView != null) {
+                for (int i = 0; i < bn.getMenu().size() && i < menuView.getChildCount(); i++) {
+                    final MenuItem mi = bn.getMenu().getItem(i);
+                    if (looksLikeSkills(mi)) {
+                        View itemView = menuView.getChildAt(i);
+                        itemView.setOnLongClickListener(v -> {
+                            new com.example.akthosidle.ui.SkillsOverviewDialog()
+                                    .show(getSupportFragmentManager(), "skills_overview");
+                            return true;
+                        });
+                        attached = true;
+                        break;
+                    }
+                }
+            }
+
+            // Fallback: long-press anywhere on the bottom bar when you are on Skills destination
+            if (!attached) {
+                bn.setOnLongClickListener(v -> {
+                    NavDestination d = navController.getCurrentDestination();
+                    if (isSkillsDestination(d)) {
+                        new com.example.akthosidle.ui.SkillsOverviewDialog()
+                                .show(getSupportFragmentManager(), "skills_overview");
+                        return true;
+                    }
+                    return false;
+                });
+            }
+        });
+    }
+
+    private boolean looksLikeSkills(MenuItem mi) {
+        if (mi == null) return false;
+        // Check id resource name
+        try {
+            String entry = getResources().getResourceEntryName(mi.getItemId());
+            if (entry != null && entry.toLowerCase(Locale.US).contains("skill")) return true;
+        } catch (Throwable ignored) {}
+        // Or title text
+        CharSequence t = mi.getTitle();
+        return t != null && t.toString().toLowerCase(Locale.US).contains("skill");
+    }
+
+    private boolean isSkillsDestination(@Nullable NavDestination d) {
+        if (d == null) return false;
+        try {
+            String entry = getResources().getResourceEntryName(d.getId());
+            if (entry != null && entry.toLowerCase(Locale.US).contains("skill")) return true;
+        } catch (Throwable ignored) {}
+        CharSequence lbl = d.getLabel();
+        return lbl != null && lbl.toString().toLowerCase(Locale.US).contains("skill");
     }
 }
