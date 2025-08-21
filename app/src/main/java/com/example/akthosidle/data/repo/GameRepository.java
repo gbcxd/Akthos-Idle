@@ -115,9 +115,11 @@ public class GameRepository {
                     Item it = new Item();
                     it.id     = id;
                     it.name   = o.optString("name", id);
-                    it.type   = o.optString("type", "resource");
+                    it.type = o.optString("type", "RESOURCE");
+                    if (it.type != null) it.type = it.type.toUpperCase();
                     it.icon   = o.optString("icon", null);
-                    it.slot   = o.optString("slot", null);
+                    it.slot = o.optString("slot", null);
+                    if (it.slot != null) it.slot = it.slot.toUpperCase();
                     it.rarity = o.optString("rarity", null);
                     if (o.has("heal")) it.heal = o.optInt("heal");
 
@@ -388,8 +390,11 @@ public class GameRepository {
         List<InventoryItem> list = new ArrayList<>();
         PlayerCharacter pc = loadOrCreatePlayer();
         for (Map.Entry<String, Integer> e : pc.bag.entrySet()) {
-            Item it = getItem(e.getKey());
-            if (it != null) list.add(new InventoryItem(it.id, it.name, e.getValue()));
+            String id = e.getKey();
+            int qty = e.getValue();
+            Item it = getItem(id);
+            String name = (it != null && it.name != null) ? it.name : id; // ← fallback so it still shows
+            list.add(new InventoryItem(id, name, qty));
         }
         return list;
     }

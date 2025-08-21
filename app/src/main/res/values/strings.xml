@@ -1,15 +1,23 @@
 <resources>
-    <string name="app_name">AkthosIdle</string>
+    <!-- Existing strings can stay; add any missing ones below -->
+
+    <!-- Toolbar / currencies strip -->
     <string name="add_gold">Add gold</string>
-    <string name="buy_gold_title">Buy gold</string>
+
+    <!-- Store -->
+    <string name="buy_gold_title">Buy Gold</string>
+
+    <!-- Skill detail -->
+    <string name="select_resource">Select resource</string>
+
+    <!-- (Optional, used elsewhere in code) -->
+    <string name="no_actions_available">No actions available yet</string>
     <string name="pick_a_resource_first">Pick a resource first</string>
-    <string name="select_resource">Select Resource</string>
-    <string name="completed_fmt">Completed: %1$s</string>
-    <string name="level_up_fmt">%1$s leveled to %2$d!</string>
     <string name="gathering_fmt">Gathering %1$s…</string>
     <string name="req_and_duration_fmt">Req Lv %1$d • %2$ds</string>
     <string name="idle">Idle</string>
     <string name="play">Play</string>
     <string name="stop">Stop</string>
-    <string name="no_actions_available">No actions available for this skill yet</string>
+    <string name="granted_item_fmt">Granted %1$d× %2$s</string>
+    <string name="app_name">Akthos Idle</string>
 </resources>

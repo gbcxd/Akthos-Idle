@@ -1,20 +1,55 @@
 {
-  "version": 1,
   "items": [
-    { "id": "copper_ore",    "name": "Copper Ore",     "type": "resource" },
-    { "id": "logs",          "name": "Logs",           "type": "resource" },
-    { "id": "fish_raw",      "name": "Raw Fish",       "type": "food" },
-    { "id": "herb_leaf",     "name": "Herb Leaf",      "type": "herb" },
-    { "id": "rabbit_meat",   "name": "Rabbit Meat",    "type": "food" },
-    { "id": "fur",           "name": "Animal Fur",     "type": "material" },
-    { "id": "leather_boots", "name": "Leather Boots",  "type": "equipment" },
-    { "id": "copper_bar",    "name": "Copper Bar",     "type": "resource" },
-    { "id": "fish_cooked",   "name": "Cooked Fish",    "type": "food" },
-    { "id": "potion_minor",  "name": "Minor Potion",   "type": "consumable" },
-    { "id": "cloth_hood",    "name": "Cloth Hood",     "type": "equipment" },
-    { "id": "wooden_bow",    "name": "Wooden Bow",     "type": "weapon" },
-    { "id": "enchanted_staff","name": "Enchanted Staff","type": "weapon" },
-    { "id": "favor_token",   "name": "Favor Token",    "type": "currency" },
-    { "id": "wheat",         "name": "Wheat",          "type": "resource" }
+    {
+      "id": "wpn_rusty_sword",
+      "name": "Rusty Sword",
+      "type": "EQUIPMENT",
+      "slot": "WEAPON",
+      "rarity": "COMMON",
+      "stats": { "attack": 3, "defense": 0, "speed": 0.0, "health": 0, "critChance": 0.0, "critMultiplier": 0.0 }
+    },
+    {
+      "id": "helm_leather_cap",
+      "name": "Leather Cap",
+      "type": "EQUIPMENT",
+      "slot": "HELMET",
+      "rarity": "COMMON",
+      "stats": { "attack": 0, "defense": 1, "speed": 0.0, "health": 5, "critChance": 0.0, "critMultiplier": 0.0 }
+    },
+    {
+      "id": "food_apple",
+      "name": "Apple",
+      "type": "CONSUMABLE",
+      "rarity": "COMMON",
+      "heal": 10
+    },
+    {
+      "id": "pot_heal_small",
+      "name": "Lesser Healing Potion",
+      "type": "CONSUMABLE",
+      "rarity": "COMMON",
+      "heal": 20
+    },
+    {
+      "id": "pot_basic_combat",
+      "name": "War Draught",
+      "type": "CONSUMABLE",
+      "rarity": "UNCOMMON",
+      "stats": { "attack": 2, "defense": 0, "speed": 0.0, "health": 0, "critChance": 0.05, "critMultiplier": 0.0 }
+    },
+    {
+      "id": "pot_basic_noncombat",
+      "name": "Focus Tonic",
+      "type": "CONSUMABLE",
+      "rarity": "UNCOMMON",
+      "skillBuffs": { "MINING": 5 }
+    },
+    {
+      "id": "syrup_basic",
+      "name": "Syrup",
+      "type": "CONSUMABLE",
+      "rarity": "UNCOMMON",
+      "heal": 20
+    }
   ]
 }
