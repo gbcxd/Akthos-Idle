@@ -1,6 +1,7 @@
 package com.example.akthosidle.engine;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -41,7 +42,6 @@ public class ActionEngine {
     public static class ItemGrant {
         public final String itemId;
         public final int quantity;
-
         public ItemGrant(String itemId, int quantity) {
             this.itemId = itemId;
             this.quantity = quantity;
@@ -57,10 +57,21 @@ public class ActionEngine {
     @Nullable private Action current;
     @Nullable private Listener listener;
 
-    // ---- constructor (public; fixes "has private access") ----
+    // ---- persistence keys (to restore after relaunch) ----
+    private static final String SP_NAME = "akthos_idle_engine";
+    private static final String KEY_RUN_ACTION_ID = "run_action_id";
+    private static final String KEY_RUN_STARTED_AT = "run_started_at"; // SystemClock.uptimeMillis()
+    private static final String KEY_RUN_SKILL = "run_skill";
+    // Cap the offline catch-up window (e.g., 2 hours)
+    private static final long MAX_OFFLINE_MS = 2L * 60L * 60L * 1000L;
+
+    private final SharedPreferences engineSp;
+
+    // ---- constructor (public) ----
     public ActionEngine(Context context, GameRepository repo) {
         this.app = context.getApplicationContext();
         this.repo = repo;
+        this.engineSp = app.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
     }
 
     // ---- wiring ----
@@ -71,7 +82,11 @@ public class ActionEngine {
         stop(); // ensure a clean single loop
         this.current = action;
         this.running = true;
-        worker = new Thread(this::runLoop, "ActionLoop");
+
+        long startedAt = SystemClock.uptimeMillis();
+        persistStart(action, startedAt);
+
+        worker = new Thread(this::runLoopFromNow, "ActionLoop");
         worker.start();
         postLoopState(true);
     }
@@ -83,42 +98,87 @@ public class ActionEngine {
             worker.interrupt();
             worker = null;
         }
+        clearPersisted();
         postLoopState(false);
     }
 
-    // ---- core loop ----
-    private void runLoop() {
-        final Action a = this.current;
-        if (a == null) return;
+    /** Try to restore a previously running loop. Returns true if resumed. */
+    public synchronized boolean restoreIfRunning() {
+        String id = engineSp.getString(KEY_RUN_ACTION_ID, null);
+        long startedAt = engineSp.getLong(KEY_RUN_STARTED_AT, 0L);
+        if (id == null || startedAt <= 0) return false;
 
-        while (running) {
-            runOneTick(a);
+        Action a = repo.getAction(id);
+        if (a == null) {
+            clearPersisted();
+            return false;
         }
+
+        this.current = a;
+        this.running = true;
+        worker = new Thread(() -> runLoopRestored(a, startedAt), "ActionLoop-Restore");
+        worker.start();
+        postLoopState(true);
+        return true;
     }
 
-    private void runOneTick(Action a) {
+    // ---- core loops ----
+    private void runLoopFromNow() {
+        final Action a = this.current;
+        if (a == null) return;
+        loopFromStartTime(a, SystemClock.uptimeMillis());
+    }
+
+    private void runLoopRestored(Action a, long startedAt) {
         long duration = Math.max(500L, a.durationMs > 0 ? a.durationMs : 3000L);
-        long start = SystemClock.uptimeMillis();
-        long end   = start + duration;
+        long now = SystemClock.uptimeMillis();
+        long elapsed = Math.max(0, now - startedAt);
+        long cappedElapsed = Math.min(elapsed, MAX_OFFLINE_MS);
 
-        // progress updates
-        while (running) {
-            long now = SystemClock.uptimeMillis();
-            long elapsed = now - start;
-            int percent = (int) Math.min(100, (elapsed * 100) / duration);
-            long remaining = Math.max(0, end - now);
-
-            postTick(a, percent, elapsed, remaining);
-
-            if (now >= end) break;
-            try { Thread.sleep(50); } catch (InterruptedException ignored) {}
+        // Grant complete cycles from the offline window
+        long cycles = cappedElapsed / duration;
+        for (long i = 0; running && i < cycles; i++) {
+            boolean leveled = grantRewardsAndXp(a);
+            postCompleted(a, leveled);
         }
 
-        if (!running) return;
+        // Continue from any partial remainder as if started 'remainderStart'
+        long remainderStart = now - (cappedElapsed % duration);
+        loopFromStartTime(a, remainderStart);
+    }
 
-        // grant rewards + xp after the bar reaches 100%
-        boolean leveled = grantRewardsAndXp(a);
-        postCompleted(a, leveled);
+    /** Loop forever, starting a cycle at the provided start time. */
+    private void loopFromStartTime(Action a, long startTimeMs) {
+        while (running) {
+            long duration = Math.max(500L, a.durationMs > 0 ? a.durationMs : 3000L);
+            long start = startTimeMs;
+            long end   = start + duration;
+
+            // progress updates
+            while (running) {
+                long now = SystemClock.uptimeMillis();
+                long elapsed = now - start;
+                int percent = (int) Math.min(100, (elapsed * 100) / duration);
+                long remaining = Math.max(0, end - now);
+
+                postTick(a, percent, elapsed, remaining);
+
+                if (now >= end) break;
+                try { Thread.sleep(50); } catch (InterruptedException ignored) {}
+            }
+
+            if (!running) break;
+
+            // grant rewards + xp after the bar reaches 100%
+            boolean leveled = grantRewardsAndXp(a);
+            postCompleted(a, leveled);
+
+            // next cycle starts now
+            startTimeMs = SystemClock.uptimeMillis();
+
+            // Update persisted start to keep offline resume accurate
+            persistStart(a, startTimeMs);
+        }
     }
 
     // ---- reward/xp ----
@@ -131,7 +191,8 @@ public class ActionEngine {
                 int qty = Math.max(1, e.getValue());
                 repo.addPendingLoot(itemId, repo.itemName(itemId), qty);
             }
-            repo.collectPendingLoot(); // immediately collect; or keep pending if you prefer
+            // Immediately collect into player; or keep pending if you want a "claim" UI
+            repo.collectPendingLoot();
         }
 
         // XP
@@ -141,6 +202,23 @@ public class ActionEngine {
         repo.save();
 
         return leveledUp;
+    }
+
+    // ---- persistence helpers ----
+    private void persistStart(Action a, long startedAt) {
+        engineSp.edit()
+                .putString(KEY_RUN_ACTION_ID, a.id)
+                .putString(KEY_RUN_SKILL, a.skill != null ? a.skill.name() : null)
+                .putLong(KEY_RUN_STARTED_AT, startedAt)
+                .apply();
+    }
+
+    private void clearPersisted() {
+        engineSp.edit()
+                .remove(KEY_RUN_ACTION_ID)
+                .remove(KEY_RUN_STARTED_AT)
+                .remove(KEY_RUN_SKILL)
+                .apply();
     }
 
     // ---- UI posting helpers ----
