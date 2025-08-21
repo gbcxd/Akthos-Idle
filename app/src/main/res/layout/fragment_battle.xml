@@ -98,12 +98,6 @@
                 android:layout_marginStart="12dp"
                 android:text="Fight" />
 
-            <CheckBox
-                android:id="@+id/cbAutoRespawn"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:text="Auto" />
         </LinearLayout>
 
         <!-- Combat log -->
