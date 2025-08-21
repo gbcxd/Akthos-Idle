@@ -8,7 +8,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -32,20 +31,24 @@ import java.util.Locale;
 
 public class BattleFragment extends Fragment {
 
+    private static final String MONSTER_ID = "shadow_thief"; // change if you wire a selector
+
     private GameViewModel vm;
 
     private ProgressBar barEnemy, barPlayer;
     private TextView tvEnemyPct, tvPlayerPct, tvEnemy, tvStatsRow, tvNoLoot;
     private Button btnFight, btnCollect, btnQuickHeal;
-    private CheckBox cbAutoRespawn;
     private ImageView imgMonster;
     private LootAdapter lootAdapter;
     private LogAdapter logAdapter;
 
+    // Infinite-loop toggle: true while user has pressed Fight and not pressed Stop
+    private boolean keepFighting = false;
+
     // long-press (2s) detector for Quick Heal
     private final Handler lpHandler = new Handler(Looper.getMainLooper());
     private boolean longPressFired = false;
-    private final int LONG_PRESS_MS = 2000;
+    private static final int LONG_PRESS_MS = 2000;
 
     @Nullable
     @Override
@@ -68,7 +71,6 @@ public class BattleFragment extends Fragment {
         tvStatsRow   = v.findViewById(R.id.tvStatsRow);
         btnQuickHeal = v.findViewById(R.id.btnQuickHeal);
         btnFight     = v.findViewById(R.id.btnFight);
-        cbAutoRespawn= v.findViewById(R.id.cbAutoRespawn);
         imgMonster   = v.findViewById(R.id.imgMonster);
         btnCollect   = v.findViewById(R.id.btnCollect);
         tvNoLoot     = v.findViewById(R.id.tvNoLoot);
@@ -76,7 +78,7 @@ public class BattleFragment extends Fragment {
         // Loot list
         RecyclerView rvLoot = v.findViewById(R.id.rvLoot);
         rvLoot.setLayoutManager(new LinearLayoutManager(requireContext()));
-        lootAdapter = new LootAdapter(vm.repo.items); // public defs map in repo
+        lootAdapter = new LootAdapter(vm.repo.items);
         rvLoot.setAdapter(lootAdapter);
 
         // Combat log list
@@ -85,11 +87,24 @@ public class BattleFragment extends Fragment {
         logAdapter = new LogAdapter();
         rvLog.setAdapter(logAdapter);
 
-        // Example enemy label (you can wire a real selector)
+        // Example enemy label (replace when you wire a selector)
         tvEnemy.setText("Shadow Thief (Lvl 1)");
 
-        // Fight toggle
-        btnFight.setOnClickListener(_v -> vm.toggleFight("shadow_thief"));
+        // Fight/Stop with infinite loop while keepFighting == true
+        btnFight.setOnClickListener(_v -> {
+            CombatEngine.BattleState sNow = vm.battleState().getValue();
+            boolean running = (sNow != null && sNow.running);
+            if (running) {
+                // User pressed Stop → end loop and stop fight
+                keepFighting = false;
+                vm.stopFight();
+            } else {
+                // User pressed Fight → set loop flag and start fighting
+                keepFighting = true;
+                vm.startFight(MONSTER_ID);
+            }
+            btnFight.setText(running ? "Fight" : "Stop");
+        });
 
         // Collect button
         btnCollect.setOnClickListener(_v -> vm.collectLoot());
@@ -100,7 +115,7 @@ public class BattleFragment extends Fragment {
         // Quick Heal button: tap = heal; 2s long-press = select consumable
         setupQuickHealButton();
 
-        // Observe combat
+        // Observe combat state
         vm.battleState().observe(getViewLifecycleOwner(), this::renderState);
 
         // Observe loot
@@ -117,7 +132,7 @@ public class BattleFragment extends Fragment {
             renderPlayerHp(hp);
         });
 
-        // Initial HP bar paint
+        // Initial HP paint
         PlayerCharacter pc = vm.player();
         int pMax = Math.max(1, pc.totalStats(vm.repo.gearStats(pc)).health);
         int pPct = (int) Math.round(100.0 * (pc.currentHp == null ? pMax : pc.currentHp) / (double) pMax);
@@ -165,11 +180,10 @@ public class BattleFragment extends Fragment {
             vm.repo.toast("Long-press to choose a consumable");
             return;
         }
-        // Check quantity still available
         Integer have = vm.player().bag.get(id);
         if (have == null || have <= 0) {
             vm.repo.toast("Out of " + vm.repo.itemName(id));
-            refreshQuickHealLabel(); // will show "(none)"
+            refreshQuickHealLabel();
             return;
         }
         vm.consumeFood(id); // this updates HP LiveData
@@ -222,7 +236,23 @@ public class BattleFragment extends Fragment {
         tvEnemyPct.setText(ePct + "%");
 
         renderPlayerHp(s.playerHp);
+
+        // Button label reflects running state
         btnFight.setText(s.running ? "Stop" : "Fight");
+
+        // Infinite loop logic:
+        // If the fight just ended and the user wants to keep fighting, restart on victory.
+        if (!s.running && keepFighting) {
+            if (s.monsterHp == 0) {
+                // Victory → immediately respawn/start same monster
+                vm.startFight(s.monsterId != null ? s.monsterId : MONSTER_ID);
+            } else if (s.playerHp == 0) {
+                // On death, stop the loop (so we don't soft-lock with 0 HP)
+                keepFighting = false;
+                btnFight.setText("Fight");
+                vm.repo.toast("You died — auto-loop stopped");
+            }
+        }
     }
 
     private void renderPlayerHp(int hpNow) {
