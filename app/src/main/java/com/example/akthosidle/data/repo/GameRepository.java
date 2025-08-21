@@ -2,13 +2,13 @@ package com.example.akthosidle.data.repo;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.content.res.AssetManager;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.lifecycle.MutableLiveData;
 
 import com.example.akthosidle.data.dtos.InventoryItem;
+import com.example.akthosidle.data.tracking.ExpTracker; // <-- XP/hour tracker
 import com.example.akthosidle.domain.model.Action;
 import com.example.akthosidle.domain.model.EquipmentSlot;
 import com.example.akthosidle.domain.model.Item;
@@ -59,6 +59,13 @@ public class GameRepository {
             new MutableLiveData<>(new HashMap<>());
     public final MutableLiveData<Integer> playerHpLive = new MutableLiveData<>();
 
+    // ===== XP/hour tracker (for the mini panel) =====
+    public final ExpTracker xpTracker = new ExpTracker();
+
+    // ===== Gathering state (shared flag & current skill) =====
+    public final MutableLiveData<Boolean> gatheringLive = new MutableLiveData<>(false);
+    @Nullable private SkillId gatheringSkill = null;
+
     public GameRepository(Context appContext) {
         this.app = appContext.getApplicationContext();
         this.sp = app.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
@@ -68,17 +75,10 @@ public class GameRepository {
      * Load static definitions (items / monsters / actions).
      * ========================================================= */
     public void loadDefinitions() {
-        if (!items.isEmpty() || !monsters.isEmpty()) {
-            // actions can still be empty on cold start; ensure loaded too
-            if (actions.isEmpty()) loadActionsFromAssets();
-            return;
-        }
-
+        // Load each independently; each loader guards against duplicates.
         loadItemsFromAssets();     // assets/game/items.v1.json
-        loadMonstersFromAssets();  // assets/game/monsters.v1.json
+        loadMonstersFromAssets();  // assets/game/monsters.v1.json (skips if seeded)
         loadActionsFromAssets();   // assets/game/actions.v1.json
-
-        // Intentionally no hardcoded defaults here. Keep JSON in assets.
     }
 
     /** Load Actions from assets; call once on startup. */
@@ -115,10 +115,10 @@ public class GameRepository {
                     Item it = new Item();
                     it.id     = id;
                     it.name   = o.optString("name", id);
-                    it.type = o.optString("type", "RESOURCE");
+                    it.type   = o.optString("type", "RESOURCE");
                     if (it.type != null) it.type = it.type.toUpperCase();
                     it.icon   = o.optString("icon", null);
-                    it.slot = o.optString("slot", null);
+                    it.slot   = o.optString("slot", null);
                     if (it.slot != null) it.slot = it.slot.toUpperCase();
                     it.rarity = o.optString("rarity", null);
                     if (o.has("heal")) it.heal = o.optInt("heal");
@@ -133,18 +133,40 @@ public class GameRepository {
 
     /** Load Monsters from assets/game/monsters.v1.json (if present). */
     private void loadMonstersFromAssets() {
+        // If monsters already seeded or loaded, skip asset load.
+        if (!monsters.isEmpty()) return;
         try (InputStream is = app.getAssets().open(ASSET_MONSTERS)) {
             String json = readStream(is);
             Type t = new TypeToken<List<Monster>>() {}.getType();
             List<Monster> list = gson.fromJson(json, t);
             if (list != null) {
                 for (Monster m : list) {
-                    if (m != null && m.id != null) monsters.put(m.id, m);
+                    if (m != null && m.id != null) monsters.put(m.id, ensureMonsterDefaults(m));
                 }
             }
         } catch (Exception ignored) {
             // Keep empty.
         }
+    }
+
+    /* ============================
+     * Seeding (from assets importer)
+     * ============================ */
+
+    /** Merge/replace monsters by id with seed data (no clear). */
+    public void seedMonsters(List<Monster> list) {
+        if (list == null || list.isEmpty()) return;
+        for (Monster m : list) {
+            if (m == null || m.id == null) continue;
+            monsters.put(m.id, ensureMonsterDefaults(m));
+        }
+    }
+
+    /** Ensure safe defaults on monster fields. */
+    private static Monster ensureMonsterDefaults(Monster m) {
+        if (m.name == null) m.name = m.id;
+        if (m.stats == null) m.stats = new Stats();
+        return m;
     }
 
     /* ============================
@@ -157,17 +179,31 @@ public class GameRepository {
         if (json != null) {
             Type t = new TypeToken<PlayerCharacter>() {}.getType();
             player = gson.fromJson(json, t);
-            // Defensive: ensure non-null fields after older saves
+
+            // --- MIGRATION START ---
             if (player.bag == null) player.bag = new HashMap<>();
             if (player.equipment == null) player.equipment = new EnumMap<>(EquipmentSlot.class);
             if (player.skills == null) player.skills = new EnumMap<>(SkillId.class);
             if (player.currencies == null) player.currencies = new HashMap<>();
+            if (player.base == null) player.base = new Stats(12, 6, 0.0, 100, 0.05, 1.5);
+
+            // Sane defaults if old saves had zeros
+            if (player.base.health <= 0) player.base.health = 100;
+            if (player.base.critMultiplier < 1.0) player.base.critMultiplier = 1.5;
+            if (player.base.critChance < 0) player.base.critChance = 0;
+            if (player.base.critChance > 1) player.base.critChance = 1;
+
             player.normalizeCurrencies();
-            if (player.currentHp == null) {
-                int maxHp = totalStats().health;
+
+            // Clamp/repair HP
+            int maxHp = totalStats().health;
+            if (maxHp <= 0) maxHp = 100; // final guard
+            if (player.currentHp == null || player.currentHp <= 0 || player.currentHp > maxHp) {
                 player.currentHp = maxHp;
-                save();
+                save(); // persist migration
             }
+            // --- MIGRATION END ---
+
             publishCurrencies();
             publishHp();
             return player;
@@ -262,6 +298,60 @@ public class GameRepository {
     private void addToBag(String id, int qty) {
         loadOrCreatePlayer(); // ensure player exists
         player.bag.put(id, player.bag.getOrDefault(id, 0) + qty);
+    }
+
+    /* ============================
+     * XP helpers (toasts + XP/h tracking)
+     * ============================ */
+
+    /** Add player (combat) XP, show a toast, and record for XP/hour. */
+    public void addPlayerExp(int amount) {
+        if (amount <= 0) return;
+        PlayerCharacter pc = loadOrCreatePlayer();
+        pc.exp += amount;
+        save();
+        toast("+" + amount + " XP");
+        xpTracker.note("combat", amount);
+    }
+
+    /** Add skill XP (optional now, ready for later) and track for XP/hour. */
+    public boolean addSkillExp(SkillId id, int amount) {
+        if (id == null || amount <= 0) return false;
+        PlayerCharacter pc = loadOrCreatePlayer();
+        boolean leveled = pc.addSkillExp(id, amount);
+        save();
+        xpTracker.note("skill:" + id.name().toLowerCase(), amount);
+        if (leveled) toast(id.name().charAt(0) + id.name().substring(1).toLowerCase() +
+                " Lv " + pc.getSkillLevel(id) + "!");
+        return leveled;
+    }
+
+    /* ============================
+     * Gathering state API
+     * ============================ */
+
+    public boolean isGatheringActive() {
+        Boolean b = gatheringLive.getValue();
+        return b != null && b;
+    }
+
+    public void startGathering(@Nullable SkillId skill) {
+        gatheringSkill = skill;
+        if (!Boolean.TRUE.equals(gatheringLive.getValue())) {
+            gatheringLive.setValue(true);
+        }
+    }
+
+    public void stopGathering() {
+        gatheringSkill = null;
+        if (!Boolean.FALSE.equals(gatheringLive.getValue())) {
+            gatheringLive.setValue(false);
+        }
+    }
+
+    @Nullable
+    public SkillId getGatheringSkill() {
+        return gatheringSkill;
     }
 
     /* ============================
@@ -393,7 +483,7 @@ public class GameRepository {
             String id = e.getKey();
             int qty = e.getValue();
             Item it = getItem(id);
-            String name = (it != null && it.name != null) ? it.name : id; // ← fallback so it still shows
+            String name = (it != null && it.name != null) ? it.name : id; // fallback so it still shows
             list.add(new InventoryItem(id, name, qty));
         }
         return list;

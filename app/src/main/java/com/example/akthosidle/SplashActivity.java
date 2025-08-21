@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.splashscreen.SplashScreen;
 
 import com.example.akthosidle.data.repo.GameRepository;
+import com.example.akthosidle.data.seed.GameSeedImporter;
 
 public class SplashActivity extends AppCompatActivity {
 
@@ -30,6 +31,12 @@ public class SplashActivity extends AppCompatActivity {
             SplashScreen splash = SplashScreen.installSplashScreen(this);
             splash.setKeepOnScreenCondition(() -> false);
         }
+
+        GameRepository repo = new GameRepository(getApplicationContext());
+
+        GameSeedImporter.importAll(this, repo);
+        repo.loadItemsFromAssets();
+        repo.loadActionsFromAssets();
 
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);

@@ -92,6 +92,10 @@ public class BattleFragment extends Fragment {
 
     private void renderState(CombatEngine.BattleState s) {
         if (s == null) return;
+
+        // Update monster name if provided by state
+        if (s.monsterName != null) tvEnemy.setText(s.monsterName);
+
         // bars
         int eMax = Math.max(1, vm.repo.getMonster(s.monsterId).stats.health);
         int pMax = Math.max(1, vm.player().totalStats(vm.repo.gearStats(vm.player())).health);
@@ -111,4 +115,5 @@ public class BattleFragment extends Fragment {
         btnCollect.setEnabled(has);
         tvNoLoot.setVisibility(has ? View.GONE : View.VISIBLE);
     }
+
 }

@@ -2,6 +2,7 @@ package com.example.akthosidle.engine;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
@@ -13,6 +14,7 @@ import com.example.akthosidle.domain.model.Monster;
 import com.example.akthosidle.domain.model.PlayerCharacter;
 import com.example.akthosidle.domain.model.Stats;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
@@ -35,7 +37,16 @@ public class CombatEngine {
         public float playerAttackInterval;
         public float monsterAttackInterval;
 
+        // 🔥 Burn status (on monster)
+        public int burnStacksOnMonster;
+        public float burnRemainingSec;
+
         public boolean running;
+    }
+
+    private static class DamageResult {
+        final int dmg; final boolean crit;
+        DamageResult(int d, boolean c){ this.dmg=d; this.crit=c; }
     }
 
     private final GameRepository repo;
@@ -43,18 +54,42 @@ public class CombatEngine {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Random rng = new Random();
 
-    // internal
-    private double pTimer = 0, mTimer = 0; // seconds
+    // Simple observable combat log
+    private final MutableLiveData<List<String>> logLive = new MutableLiveData<>(new ArrayList<>());
+    public LiveData<List<String>> log() { return logLive; }
+    private boolean debugToasts = false;
+    public void setDebugToasts(boolean enabled) { this.debugToasts = enabled; }
+
+    // internal timers (seconds)
+    private double pTimer = 0, mTimer = 0;
+    private long lastTickMs = 0L;
+
     private Stats pStats, mStats;
     private Monster monster;
     private PlayerCharacter pc;
 
-    // cache current intervals for progress calculation
+    // cache current intervals (seconds) for progress calculation
     private double pAtkItv = 2.5, mAtkItv = 2.5;
 
-    public CombatEngine(GameRepository repo) { this.repo = repo; }
+    // 🔥 Burn constants (tune as desired)
+    private static final double BURN_APPLY_CHANCE = 0.25; // 25% per player hit
+    private static final int    BURN_MAX_STACKS   = 5;
+    private static final double BURN_DURATION_SEC = 5.0;
+    private static final int    BURN_DMG_PER_TICK_PER_STACK = 2;
+
+    // Burn runtime (monster)
+    private int burnStacks = 0;
+    private double burnRemainSec = 0.0;
+    private double burnTickAcc = 0.0; // accumulates toward 1s ticks
+
+    public CombatEngine(GameRepository repo) {
+        this.repo = repo;
+    }
 
     public LiveData<BattleState> state() { return state; }
+
+    /** Optional helper to make combat deterministic while debugging. */
+    public void setRandomSeed(long seed) { rng.setSeed(seed); }
 
     public void start(String monsterId) {
         this.pc = repo.loadOrCreatePlayer();
@@ -62,8 +97,8 @@ public class CombatEngine {
         if (monster == null) return;
 
         // Guard stats in case of nulls
-        this.pStats = pc != null ? pc.totalStats(repo.gearStats(pc)) : new Stats();
-        this.mStats = monster.stats != null ? monster.stats : new Stats();
+        this.pStats = (pc != null) ? pc.totalStats(repo.gearStats(pc)) : new Stats();
+        this.mStats = (monster.stats != null) ? monster.stats : new Stats();
 
         BattleState s = new BattleState();
         s.monsterId = monsterId;
@@ -72,6 +107,7 @@ public class CombatEngine {
         s.playerMaxHp = Math.max(1, pStats.health);
         s.monsterMaxHp = Math.max(1, mStats.health);
         s.playerHp = Math.min(pc != null && pc.currentHp != null ? pc.currentHp : s.playerMaxHp, s.playerMaxHp);
+        if (s.playerHp <= 0) s.playerHp = s.playerMaxHp; // safety: never start at 0 HP
         s.monsterHp = s.monsterMaxHp;
 
         s.playerAttackProgress = 0f;
@@ -79,10 +115,19 @@ public class CombatEngine {
         s.playerAttackInterval = 0f;
         s.monsterAttackInterval = 0f;
 
+        // Reset burn status
+        burnStacks = 0; burnRemainSec = 0.0; burnTickAcc = 0.0;
+        s.burnStacksOnMonster = 0; s.burnRemainingSec = 0f;
+
         s.running = true;
         state.setValue(s);
 
+        // clear log at start
+        logClear();
+        logLine("Encounter started: " + s.monsterName);
+
         pTimer = mTimer = 0;
+        lastTickMs = SystemClock.uptimeMillis();
         loop();
     }
 
@@ -93,6 +138,7 @@ public class CombatEngine {
             state.setValue(s);
         }
         handler.removeCallbacksAndMessages(null); // ensure loop stops
+
         // persist player HP
         if (pc != null && s != null) {
             pc.currentHp = s.playerHp;
@@ -103,78 +149,143 @@ public class CombatEngine {
     private void loop() {
         BattleState s = state.getValue();
         if (s == null || !s.running) return;
-        handler.postDelayed(this::tick, 16); // ~60 Hz
+        handler.postDelayed(this::tick, 16); // schedule next tick (~60Hz)
     }
 
     private void tick() {
         BattleState s = state.getValue();
         if (s == null || !s.running) return;
 
+        // Real elapsed time since last frame (seconds)
+        long now = SystemClock.uptimeMillis();
+        double deltaSec = Math.max(0, (now - lastTickMs) / 1000.0);
+        lastTickMs = now;
+
         // attack intervals (base 2.5s, minus speed bonuses)
         pAtkItv = Math.max(0.6, 2.5 - clamp01(pStats.speed) * 2.5);
         mAtkItv = Math.max(0.6, 2.5 - clamp01(mStats.speed) * 2.5);
 
-        // advance timers
-        pTimer += 0.016;
-        mTimer += 0.016;
+        // advance timers by real elapsed time
+        pTimer += deltaSec;
+        mTimer += deltaSec;
 
-        // progress (0..1)
-        s.playerAttackProgress = (float) Math.min(1.0, pTimer / pAtkItv);
-        s.monsterAttackProgress = (float) Math.min(1.0, mTimer / mAtkItv);
-        s.playerAttackInterval = (float) pAtkItv;
-        s.monsterAttackInterval = (float) mAtkItv;
+        // Player attacks (preserve overrun for consistent timing)
+        while (pTimer >= pAtkItv && s.monsterHp > 0) {
+            pTimer -= pAtkItv;
+            DamageResult res = damageRollEx(pStats.attack, mStats.defense,
+                    clamp01(pStats.critChance), Math.max(1.0, pStats.critMultiplier));
+            s.monsterHp = Math.max(0, s.monsterHp - res.dmg);
+            logLine("You hit " + s.monsterName + " for " + res.dmg + (res.crit ? " (CRIT!)" : ""));
 
-        if (pTimer >= pAtkItv && s.monsterHp > 0) {
-            pTimer = 0;
-            int dmg = damageRoll(pStats.attack, mStats.defense, clamp01(pStats.critChance), Math.max(1.0, pStats.critMultiplier));
-            s.monsterHp = Math.max(0, s.monsterHp - dmg);
-            s.playerAttackProgress = 0f;
+            // +1 Attack XP per hit
+            repo.addSkillExp(com.example.akthosidle.domain.model.SkillId.ATTACK, 1);
+
+            // 🔥 Try to apply/refresh Burn on monster
+            if (rng.nextDouble() < BURN_APPLY_CHANCE) {
+                int before = burnStacks;
+                if (burnStacks < BURN_MAX_STACKS) burnStacks++;
+                burnRemainSec = BURN_DURATION_SEC; // refresh duration
+                logLine("Burn " + (burnStacks > before ? "applied" : "refreshed")
+                        + " (" + burnStacks + " stacks, " + (int)Math.ceil(burnRemainSec) + "s)");
+            }
         }
-        if (mTimer >= mAtkItv && s.playerHp > 0) {
-            mTimer = 0;
-            int dmg = damageRoll(mStats.attack, pStats.defense, clamp01(mStats.critChance), Math.max(1.0, mStats.critMultiplier));
-            s.playerHp = Math.max(0, s.playerHp - dmg);
-            s.monsterAttackProgress = 0f;
+
+        // 🔥 Burn ticking (on monster) — occurs after hits, before victory check
+        if (burnStacks > 0 && s.monsterHp > 0) {
+            burnRemainSec = Math.max(0.0, burnRemainSec - deltaSec);
+            burnTickAcc += deltaSec;
+
+            // Deal damage every full 1s
+            while (burnTickAcc >= 1.0 && burnRemainSec > 0.0 && s.monsterHp > 0) {
+                int burnDmg = burnStacks * BURN_DMG_PER_TICK_PER_STACK;
+                s.monsterHp = Math.max(0, s.monsterHp - burnDmg);
+                burnTickAcc -= 1.0;
+                logLine("Burn tick: -" + burnDmg + " HP (" + burnStacks + " stacks)");
+            }
+
+            if (burnRemainSec == 0.0) {
+                burnStacks = 0;
+                burnTickAcc = 0.0;
+                logLine("Burn expired");
+            }
+        }
+
+        // Monster attacks
+        while (mTimer >= mAtkItv && s.playerHp > 0) {
+            mTimer -= mAtkItv;
+            DamageResult res = damageRollEx(mStats.attack, pStats.defense,
+                    clamp01(mStats.critChance), Math.max(1.0, mStats.critMultiplier));
+            s.playerHp = Math.max(0, s.playerHp - res.dmg);
+            logLine(s.monsterName + " hits you for " + res.dmg + (res.crit ? " (CRIT!)" : ""));
+            // +1 Defense XP when hit
+            repo.addSkillExp(com.example.akthosidle.domain.model.SkillId.DEFENSE, 1);
         }
 
         // defeat/victory
         if (s.monsterHp == 0 || s.playerHp == 0) {
             s.running = false;
             if (s.monsterHp == 0) {
-                // prefer two-arg method (authoritative on player + monster)
                 grantRewards(pc, monster);
+                logLine("You defeated " + s.monsterName + "!");
+            } else {
+                logLine("You were defeated by " + s.monsterName + "...");
             }
             if (pc != null) pc.currentHp = s.playerHp;
             repo.save();
+            // progress/intervals for final frame
+            s.playerAttackProgress = (float) Math.min(1.0, pTimer / pAtkItv);
+            s.monsterAttackProgress = (float) Math.min(1.0, mTimer / mAtkItv);
+            s.playerAttackInterval = (float) pAtkItv;
+            s.monsterAttackInterval = (float) mAtkItv;
+            // expose burn to UI on the last frame
+            s.burnStacksOnMonster = burnStacks;
+            s.burnRemainingSec = (float) burnRemainSec;
             state.setValue(s);
             return;
         }
+
+        // Update progress & intervals for UI this frame
+        s.playerAttackProgress = (float) Math.min(1.0, pTimer / pAtkItv);
+        s.monsterAttackProgress = (float) Math.min(1.0, mTimer / mAtkItv);
+        s.playerAttackInterval = (float) pAtkItv;
+        s.monsterAttackInterval = (float) mAtkItv;
+
+        // Update burn UI fields
+        s.burnStacksOnMonster = burnStacks;
+        s.burnRemainingSec = (float) burnRemainSec;
 
         state.setValue(s);
         loop();
     }
 
-    private int damageRoll(int atk, int def, double critC, double critM) {
-        int base = Math.max(1, atk - (int)(def * 0.6));
-        int roll = (int)Math.round(base * (0.85 + rng.nextDouble() * 0.3)); // ±15%
+    // Returns both damage and crit flag for UI/logging
+    private DamageResult damageRollEx(int atk, int def, double critC, double critM) {
+        int base = Math.max(1, atk - (int) (def * 0.6));
+        // ±15% variation
+        int roll = (int) Math.round(base * (0.85 + rng.nextDouble() * 0.3));
         boolean crit = rng.nextDouble() < critC;
-        if (crit) roll = (int)Math.round(roll * Math.max(1.25, critM));
-        return Math.max(1, roll);
+        if (crit) roll = (int) Math.round(roll * Math.max(1.25, critM));
+        return new DamageResult(Math.max(1, roll), crit);
     }
 
     /** Overload so old one-arg calls won’t break if they resurface. */
-    private void grantRewards(Monster m) {
-        grantRewards(this.pc, m);
-    }
+    private void grantRewards(Monster m) { grantRewards(this.pc, m); }
 
     private void grantRewards(PlayerCharacter pc, Monster m) {
         if (pc == null || m == null) return;
 
-        // XP / gold
-        pc.exp += Math.max(0, m.expReward);
+        // XP (toast + track XP/h)
+        int xp = Math.max(0, m.expReward);
+        repo.addPlayerExp(xp);
+
+        // Gold as currency (updates toolbar)
         if (m.goldReward > 0) {
-            pc.addItem("gold", m.goldReward);
+            repo.addCurrency("gold", m.goldReward);
         }
+
+        // Log rewards line
+        String rewards = "Rewards: +" + xp + " XP" + (m.goldReward > 0 ? (", +" + m.goldReward + " gold") : "");
+        logLine(rewards);
 
         // --- DROPS ---
         List<Drop> drops = m.drops;
@@ -201,7 +312,20 @@ public class CombatEngine {
         return v;
     }
 
-    private int reqExp(int lvl) {
-        return 50 + (lvl * 25);
+    private int reqExp(int lvl) { return 50 + (lvl * 25); }
+
+    // ----- tiny log helpers -----
+    private void logClear() {
+        logLive.postValue(new ArrayList<>());
+    }
+    private void logLine(String msg) {
+        List<String> cur = logLive.getValue();
+        if (cur == null) cur = new ArrayList<>();
+        // prepend newest
+        cur.add(0, msg);
+        // cap to 50 lines
+        if (cur.size() > 50) cur = new ArrayList<>(cur.subList(0, 50));
+        logLive.postValue(cur);
+        if (debugToasts) repo.toast(msg);
     }
 }

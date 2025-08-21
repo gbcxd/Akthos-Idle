@@ -11,13 +11,13 @@ import androidx.fragment.app.Fragment;
 import androidx.navigation.fragment.NavHostFragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
+import com.example.akthosidle.MainActivity;
 import com.example.akthosidle.R;
 import com.example.akthosidle.data.repo.GameRepository;
 import com.example.akthosidle.databinding.FragmentSkillsBinding;
 import com.example.akthosidle.domain.model.PlayerCharacter;
 import com.example.akthosidle.domain.model.Skill;
 import com.example.akthosidle.domain.model.SkillId;
-import com.example.akthosidle.ui.SkillAdapter;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -43,7 +43,8 @@ public class SkillsFragment extends Fragment {
     public void onViewCreated(@NonNull View v, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(v, savedInstanceState);
 
-        repo = new GameRepository(requireContext().getApplicationContext());
+        // Use the shared repo from MainActivity so state (like gathering) is consistent app-wide.
+        repo = ((MainActivity) requireActivity()).getRepo();
         repo.loadDefinitions();
         PlayerCharacter pc = repo.loadOrCreatePlayer();
 
@@ -52,14 +53,49 @@ public class SkillsFragment extends Fragment {
 
         List<SkillAdapter.SkillRow> rows = buildRows(pc);
         SkillAdapter adapter = new SkillAdapter(rows, row -> {
+            // Navigate to the Skill Detail screen on tap
             Bundle args = new Bundle();
-            // nav_graph arg name is "skillId" (string)
-            args.putString("skillId", row.id);
+            args.putString("skillId", row.id); // nav_graph arg: skillId (String)
             NavHostFragment.findNavController(this)
                     .navigate(R.id.action_nav_skills_to_skillDetail, args);
         });
         b.recycler.setAdapter(adapter);
+
+        // Keep the XP/h FAB visibility in sync with gathering state while we're on this screen
+        repo.gatheringLive.observe(getViewLifecycleOwner(), isOn -> {
+            ((MainActivity) requireActivity()).setGatheringActive(Boolean.TRUE.equals(isOn));
+        });
     }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Sync current state when (re)entering the screen
+        ((MainActivity) requireActivity()).setGatheringActive(isGatheringRunningNow());
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        // When leaving the Skills tab, tell the activity to hide the FAB unless gathering is still on
+        ((MainActivity) requireActivity()).setGatheringActive(false);
+    }
+
+    // --- stubs you can call from Skill Detail or any UI element in this fragment ---
+
+    /** Call this when the player starts a gathering loop for a given skill. */
+    private void onGatheringStarted(@Nullable SkillId skill) {
+        repo.startGathering(skill);
+        ((MainActivity) requireActivity()).setGatheringActive(true);
+    }
+
+    /** Call this when gathering stops. */
+    private void onGatheringStopped() {
+        repo.stopGathering();
+        ((MainActivity) requireActivity()).setGatheringActive(false);
+    }
+
+    // ------------------------------------------------------------------------------
 
     private List<SkillAdapter.SkillRow> buildRows(PlayerCharacter pc) {
         Map<SkillId, Skill> map = (pc.skills != null) ? pc.skills : new EnumMap<>(SkillId.class);
@@ -76,6 +112,12 @@ public class SkillsFragment extends Fragment {
             out.add(new SkillAdapter.SkillRow(id.name(), name, lvl, icon));
         }
         return out;
+    }
+
+    private boolean isGatheringRunningNow() {
+        MainActivity a = (MainActivity) requireActivity();
+        GameRepository repo = a.getRepo();
+        return repo != null && repo.isGatheringActive();
     }
 
     /** Treat these as combat skills and exclude them from the skilling list. */
@@ -126,7 +168,6 @@ public class SkillsFragment extends Fragment {
             default:         return R.drawable.ic_skill_generic;
         }
     }
-
 
     @Override
     public void onDestroyView() {

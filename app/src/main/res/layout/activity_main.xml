@@ -45,4 +45,73 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <!-- XP/hour Mini-Panel (hidden by default, toggled by the FAB)     -->
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/xpPanel"
+        android:layout_width="220dp"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:layout_margin="16dp"
+        app:cardUseCompatPadding="true"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="6dp"
+        app:layout_constraintBottom_toTopOf="@id/bottom_nav"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:padding="12dp"
+            android:orientation="vertical"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/xpTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="XP/hour"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/btnXpFilter"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/app_name"
+                    android:src="@android:drawable/ic_menu_manage" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/txtXpRate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="0 xp/h" />
+
+            <TextView
+                android:id="@+id/txtXpKeys"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="(combat)"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- FAB to toggle the XP/hour panel -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabXp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        app:srcCompat="@android:drawable/ic_menu_info_details"
+        app:layout_constraintBottom_toTopOf="@id/bottom_nav"
+        app:layout_constraintEnd_toEndOf="parent" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>
