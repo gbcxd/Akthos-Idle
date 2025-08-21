@@ -1,0 +1,25 @@
+[
+  {
+    "id": "ore_copper",
+    "name": "Copper Ore",
+    "icon": "ic_ore_copper",
+    "type": "RESOURCE",
+    "rarity": "COMMON"
+  },
+  {
+    "id": "fish_shrimp",
+    "name": "Raw Shrimp",
+    "icon": "ic_fish_shrimp",
+    "type": "RESOURCE",
+    "rarity": "COMMON"
+  },
+  {
+    "id": "wpn_rusty_sword",
+    "name": "Rusty Sword",
+    "icon": "ic_sword",
+    "type": "EQUIPMENT",
+    "slot": "WEAPON",
+    "rarity": "COMMON",
+    "stats": { "attack": 3, "defense": 0, "speed": 0.0, "health": 0, "critChance": 0.0, "critMultiplier": 0.0 }
+  }
+]

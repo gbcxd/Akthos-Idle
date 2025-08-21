@@ -1,0 +1,20 @@
+[
+  {
+    "id": "mine_copper",
+    "name": "Mine Copper",
+    "skill": "MINING",
+    "durationMs": 3000,
+    "exp": 8,
+    "reqLevel": 1,
+    "outputs": { "ore_copper": 1 }
+  },
+  {
+    "id": "fish_shrimp",
+    "name": "Fish Shrimp",
+    "skill": "FISHING",
+    "durationMs": 3000,
+    "exp": 7,
+    "reqLevel": 1,
+    "outputs": { "fish_shrimp": 1 }
+  }
+]

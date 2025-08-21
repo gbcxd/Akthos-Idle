@@ -1,0 +1,14 @@
+[
+  {
+    "id": "shadow_thief",
+    "name": "Shadow Thief",
+    "stats": { "attack": 8, "defense": 4, "speed": 0.15, "health": 40, "critChance": 0.05, "critMultiplier": 1.5 },
+    "expReward": 20,
+    "goldReward": 0,
+    "silverReward": 12,
+    "slayerReward": 0,
+    "drops": [
+      { "itemId": "food_apple", "minQty": 1, "maxQty": 3, "chance": 0.5 }
+    ]
+  }
+]

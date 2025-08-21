@@ -68,123 +68,73 @@ public class GameRepository {
     public void loadDefinitions() {
         if (!items.isEmpty() || !monsters.isEmpty()) return;
 
-        // ---------- Items ----------
-        Item rustySword = new Item();
-        rustySword.id = "wpn_rusty_sword";
-        rustySword.name = "Rusty Sword";
-        rustySword.icon = "ic_sword";
-        rustySword.type = "EQUIPMENT";
-        rustySword.slot = "WEAPON";
-        rustySword.rarity = "COMMON";
-        rustySword.stats = new Stats(3, 0, 0.0, 0, 0.0, 0.0);
-        items.put(rustySword.id, rustySword);
+        loadItemsFromAssets();     // game/items.v1.json
+        loadMonstersFromAssets();  // game/monsters.v1.json
+        loadActionsFromAssets();  // game/actions.v1.json
 
-        Item leatherCap = new Item();
-        leatherCap.id = "helm_leather_cap";
-        leatherCap.name = "Leather Cap";
-        leatherCap.icon = "ic_helmet";
-        leatherCap.type = "EQUIPMENT";
-        leatherCap.slot = "HELMET";
-        leatherCap.rarity = "COMMON";
-        leatherCap.stats = new Stats(0, 1, 0.0, 5, 0.0, 0.0);
-        items.put(leatherCap.id, leatherCap);
-
-        Item apple = new Item();
-        apple.id = "food_apple";
-        apple.name = "Apple";
-        apple.icon = "ic_food_apple";
-        apple.type = "CONSUMABLE";
-        apple.rarity = "COMMON";
-        apple.heal = 10;
-        items.put(apple.id, apple);
-
-        Item warDraught = new Item();
-        warDraught.id = "pot_basic_combat";
-        warDraught.name = "War Draught";
-        warDraught.icon = "ic_potion_red";
-        warDraught.type = "CONSUMABLE";
-        warDraught.rarity = "UNCOMMON";
-        warDraught.stats = new Stats(2, 0, 0.0, 0, 0.05, 0.0);
-        items.put(warDraught.id, warDraught);
-
-        Item focusTonic = new Item();
-        focusTonic.id = "pot_basic_noncombat";
-        focusTonic.name = "Focus Tonic";
-        focusTonic.icon = "ic_potion_blue";
-        focusTonic.type = "CONSUMABLE";
-        focusTonic.rarity = "UNCOMMON";
-        focusTonic.skillBuffs = new HashMap<>();
-        focusTonic.skillBuffs.put("MINING", 5);
-        items.put(focusTonic.id, focusTonic);
-
-        Item syrup = new Item();
-        syrup.id = "syrup_basic";
-        syrup.name = "Syrup";
-        syrup.icon = "ic_flask";
-        syrup.type = "CONSUMABLE";
-        syrup.rarity = "UNCOMMON";
-        syrup.heal = 20;
-        items.put(syrup.id, syrup);
-
-        Item smallHeal = new Item();
-        smallHeal.id = "pot_heal_small";
-        smallHeal.name = "Lesser Healing Potion";
-        smallHeal.icon = "ic_potion_green";
-        smallHeal.type = "CONSUMABLE";
-        smallHeal.rarity = "COMMON";
-        smallHeal.heal = 500; // heals 30 HP
-        items.put(smallHeal.id, smallHeal);
-
-        // ---------- Monsters ----------
-        Monster thief = new Monster();
-        thief.id = "shadow_thief";
-        thief.name = "Shadow Thief";
-        thief.stats = new Stats(8, 4, 0.15, 40, 0.05, 1.5);
-        thief.expReward = 20;
-        thief.goldReward = 0;
-        thief.silverReward = 12;
-        thief.slayerReward = 0;
-        thief.drops = new ArrayList<>();
-        thief.drops.add(new Drop("food_apple", 1, 3, 0.5));
-        monsters.put(thief.id, thief);
+        // No hardcoded defaults here. If files are missing or empty,
+        // the maps will remain empty and UI should handle that state gracefully.
     }
 
     /** Load Actions from assets; call once on startup (e.g., Application or first screen). */
     public void loadActionsFromAssets() {
-        if (!actions.isEmpty()) return;
-        AssetManager am = app.getAssets();
-        try (InputStream is = am.open("game/actions.v1.json")) {
-            String json = readStream(is); // API 24+ compatible
+        if (!actions.isEmpty()) return; // already loaded
+
+        try (InputStream is = app.getAssets().open("game/actions.v1.json")) {
+            String json = readStream(is); // works on API 24+
             Type t = new TypeToken<List<Action>>() {}.getType();
             List<Action> list = gson.fromJson(json, t);
             if (list != null) {
                 for (Action a : list) {
-                    if (a != null && a.id != null) actions.put(a.id, a);
+                    if (a != null && a.id != null) {
+                        actions.put(a.id, a);
+                    }
                 }
             }
         } catch (Exception e) {
-            // Fallback: a couple of hardcoded actions so UI can run without assets
-            Action mineCopper = new Action();
-            mineCopper.id = "mine_copper";
-            mineCopper.name = "Mine Copper";
-            mineCopper.skill = SkillId.MINING;
-            mineCopper.durationMs = 3000;
-            mineCopper.exp = 8;
-            mineCopper.outputs = new HashMap<>();
-            mineCopper.outputs.put("ore_copper", 1);
-            mineCopper.reqLevel = 1;
-            actions.put(mineCopper.id, mineCopper);
+            // Keep empty if file is missing/corrupt; UI should handle no actions gracefully.
+            // Optionally log/Toast in debug builds.
+            // toast("Actions file not found: game/actions.v1.json");
+        }
+    }
 
-            Action fishShrimp = new Action();
-            fishShrimp.id = "fish_shrimp";
-            fishShrimp.name = "Fish Shrimp";
-            fishShrimp.skill = SkillId.FISHING;
-            fishShrimp.durationMs = 3000;
-            fishShrimp.exp = 7;
-            fishShrimp.outputs = new HashMap<>();
-            fishShrimp.outputs.put("fish_shrimp", 1);
-            fishShrimp.reqLevel = 1;
-            actions.put(fishShrimp.id, fishShrimp);
+    /** Load Items from assets/game/items.v1.json (if present). */
+    private void loadItemsFromAssets() {
+        AssetManager am = app.getAssets();
+        try (InputStream is = am.open("game/items.v1.json")) {
+            String json = readStream(is);
+            Type t = new TypeToken<List<Item>>() {}.getType();
+            List<Item> list = gson.fromJson(json, t);
+            if (list != null) {
+                for (Item it : list) {
+                    if (it != null && it.id != null) {
+                        items.put(it.id, it);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Safe fallback: keep empty. Optionally log or toast once in debug.
+            // toast("Items file not found (game/items.v1.json). Using empty items.");
+        }
+    }
+
+    /** Load Monsters from assets/game/monsters.v1.json (if present). */
+    private void loadMonstersFromAssets() {
+        AssetManager am = app.getAssets();
+        try (InputStream is = am.open("game/monsters.v1.json")) {
+            String json = readStream(is);
+            Type t = new TypeToken<List<Monster>>() {}.getType();
+            List<Monster> list = gson.fromJson(json, t);
+            if (list != null) {
+                for (Monster m : list) {
+                    if (m != null && m.id != null) {
+                        monsters.put(m.id, m);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Safe fallback: keep empty. Optionally log or toast once in debug.
+            // toast("Monsters file not found (game/monsters.v1.json). Using empty monsters.");
         }
     }
 
