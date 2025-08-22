@@ -50,6 +50,17 @@
       "type": "CONSUMABLE",
       "rarity": "UNCOMMON",
       "heal": 20
-    }
+    },
+
+    { "id": "log_oak",         "name": "Oak Log",        "type": "RESOURCE" },
+    { "id": "log_pine",        "name": "Pine Log",       "type": "RESOURCE" },
+
+    { "id": "ore_copper",      "name": "Copper Ore",     "type": "RESOURCE" },
+    { "id": "ore_tin",         "name": "Tin Ore",        "type": "RESOURCE" },
+
+    { "id": "fish_raw_shrimp", "name": "Raw Shrimp",     "type": "RESOURCE" },
+
+    { "id": "herb_mint",       "name": "Mint Leaf",      "type": "RESOURCE" },
+    { "id": "herb_sage",       "name": "Sage Leaf",      "type": "RESOURCE" }
   ]
 }

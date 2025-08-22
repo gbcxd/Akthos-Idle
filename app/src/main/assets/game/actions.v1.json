@@ -1,131 +1,72 @@
-{
-  "version": 1,
-  "actions": [
-    {
-      "id": "MINE_COPPER",
-      "name": "Mine Copper Ore",
-      "skill": "MINING",
-      "reqLevel": 1,
-      "exp": 10,
-      "durationMs": 3000,
-      "outputs": { "copper_ore": 1 }
-    },
-    {
-      "id": "CHOP_LOGS",
-      "name": "Chop Logs",
-      "skill": "WOODCUTTING",
-      "reqLevel": 1,
-      "exp": 10,
-      "durationMs": 3000,
-      "outputs": { "logs": 1 }
-    },
-    {
-      "id": "CATCH_FISH",
-      "name": "Catch Fish",
-      "skill": "FISHING",
-      "reqLevel": 1,
-      "exp": 10,
-      "durationMs": 4000,
-      "outputs": { "fish_raw": 1 }
-    },
-    {
-      "id": "FORAGE_HERB",
-      "name": "Forage Herbs",
-      "skill": "GATHERING",
-      "reqLevel": 1,
-      "exp": 8,
-      "durationMs": 2500,
-      "outputs": { "herb_leaf": 1 }
-    },
-    {
-      "id": "HUNT_RABBIT",
-      "name": "Hunt Rabbit",
-      "skill": "HUNTING",
-      "reqLevel": 1,
-      "exp": 12,
-      "durationMs": 5000,
-      "outputs": { "rabbit_meat": 1, "fur": 1 }
-    },
-    {
-      "id": "CRAFT_LEATHER",
-      "name": "Craft Leather Boots",
-      "skill": "CRAFTING",
-      "reqLevel": 5,
-      "exp": 20,
-      "durationMs": 6000,
-      "outputs": { "leather_boots": 1 }
-    },
-    {
-      "id": "SMELT_COPPER",
-      "name": "Smelt Copper Bar",
-      "skill": "SMITHING",
-      "reqLevel": 5,
-      "exp": 20,
-      "durationMs": 6000,
-      "outputs": { "copper_bar": 1 }
-    },
-    {
-      "id": "COOK_FISH",
-      "name": "Cook Fish",
-      "skill": "COOKING",
-      "reqLevel": 2,
-      "exp": 15,
-      "durationMs": 4000,
-      "outputs": { "fish_cooked": 1 }
-    },
-    {
-      "id": "BREW_POTION",
-      "name": "Brew Minor Potion",
-      "skill": "ALCHEMY",
-      "reqLevel": 3,
-      "exp": 18,
-      "durationMs": 5000,
-      "outputs": { "potion_minor": 1 }
-    },
-    {
-      "id": "SEW_CLOTH",
-      "name": "Sew Cloth Hood",
-      "skill": "TAILORING",
-      "reqLevel": 4,
-      "exp": 20,
-      "durationMs": 5500,
-      "outputs": { "cloth_hood": 1 }
-    },
-    {
-      "id": "CARVE_BOW",
-      "name": "Carve Wooden Bow",
-      "skill": "CARPENTRY",
-      "reqLevel": 6,
-      "exp": 25,
-      "durationMs": 6500,
-      "outputs": { "wooden_bow": 1 }
-    },
-    {
-      "id": "ENCHANT_STAFF",
-      "name": "Enchant Staff",
-      "skill": "ENCHANTING",
-      "reqLevel": 8,
-      "exp": 30,
-      "durationMs": 8000,
-      "outputs": { "enchanted_staff": 1 }
-    },
-    {
-      "id": "HELP_VILLAGER",
-      "name": "Help Villager",
-      "skill": "COMMUNITY",
-      "reqLevel": 1,
-      "exp": 5,
-      "durationMs": 2000,
-      "outputs": { "favor_token": 1 }
-    },
-    {
-      "id": "HARVEST_WHEAT",
-      "name": "Harvest Wheat",
-      "skill": "HARVESTING",
-      "reqLevel": 1,
-      "exp": 10,
-      "durationMs": 3500,
-      "outputs": { "wheat": 1 }
-    }
-  ]
-}
+[
+  {
+    "id": "wood_oak",
+    "name": "Chop Oak",
+    "skill": "WOODCUTTING",
+    "levelReq": 1,
+    "durationSec": 4.0,
+    "xp": 8,
+    "drops": [
+      { "itemId": "log_oak", "chance": 1.0, "min": 1, "max": 2 }
+    ]
+  },
+  {
+    "id": "wood_pine",
+    "name": "Chop Pine",
+    "skill": "WOODCUTTING",
+    "levelReq": 5,
+    "durationSec": 5.0,
+    "xp": 12,
+    "drops": [
+      { "itemId": "log_pine", "chance": 1.0, "min": 1, "max": 2 }
+    ]
+  },
+
+  {
+    "id": "mine_copper",
+    "name": "Mine Copper",
+    "skill": "MINING",
+    "levelReq": 1,
+    "durationSec": 5.0,
+    "xp": 8,
+    "drops": [
+      { "itemId": "ore_copper", "chance": 1.0, "min": 1, "max": 2 }
+    ]
+  },
+  {
+    "id": "mine_tin",
+    "name": "Mine Tin",
+    "skill": "MINING",
+    "levelReq": 3,
+    "durationSec": 5.0,
+    "xp": 10,
+    "drops": [
+      { "itemId": "ore_tin", "chance": 1.0, "min": 1, "max": 2 }
+    ]
+  },
+
+  {
+    "id": "fish_shrimp",
+    "name": "Net Shrimp",
+    "skill": "FISHING",
+    "levelReq": 1,
+    "durationSec": 6.0,
+    "xp": 8,
+    "drops": [
+      { "itemId": "fish_raw_shrimp", "chance": 1.0, "min": 1, "max": 2 }
+    ]
+  },
+
+  {
+    "id": "gather_herbs",
+    "name": "Gather Herbs",
+    "skill": "GATHERING",
+    "levelReq": 1,
+    "durationSec": 4.0,
+    "xp": 6,
+    "drops": [
+      { "itemId": "herb_mint", "chance": 0.85, "min": 1, "max": 2 },
+      { "itemId": "herb_sage", "chance": 0.25, "min": 1, "max": 1 }
+    ]
+  }
+]
