@@ -2,14 +2,11 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="12dp">
+    android:padding="8dp">
 
     <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvSkillsOverview"
+        android:id="@+id/rvSkills"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:overScrollMode="never"
-        android:fadingEdgeLength="8dp"
-        android:requiresFadingEdge="vertical"/>
-
+        android:overScrollMode="never"/>
 </FrameLayout>

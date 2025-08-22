@@ -6,7 +6,7 @@ import android.os.Looper;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;              // <-- NEW
+import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.TextView;
 
@@ -25,6 +25,9 @@ import com.example.akthosidle.databinding.ActivityMainBinding;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+
+// IMPORTANT: use your app's BuildConfig, not Firebase's.
+import com.example.akthosidle.BuildConfig;
 
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -116,7 +119,7 @@ public class MainActivity extends AppCompatActivity {
         NavigationUI.setupWithNavController(bottomNav, navController);
         bottomNav.setOnItemReselectedListener(item -> { /* no-op */ });
 
-        // Attach long-press to the Skills tab
+        // Attach long-press to the Skills tab (opens 2-column dialog)
         attachSkillsLongPress(bottomNav);
 
         // XP/hour mini-panel wiring
@@ -132,8 +135,10 @@ public class MainActivity extends AppCompatActivity {
         });
 
         // Also react when repo flags change (battle/gather toggles)
-        repo.battleLive.observe(this, b -> updateXpFabForDestination(navController.getCurrentDestination()));
-        repo.gatheringLive.observe(this, g -> updateXpFabForDestination(navController.getCurrentDestination()));
+        repo.battleLive.observe(this,
+                isBattle -> updateXpFabForDestination(navController.getCurrentDestination()));
+        repo.gatheringLive.observe(this,
+                isGather -> updateXpFabForDestination(navController.getCurrentDestination()));
     }
 
     // ===== Dev overflow menu =====
@@ -243,9 +248,19 @@ public class MainActivity extends AppCompatActivity {
                         .setPositiveButton("OK", (d, w) -> {
                             xpSelectedKeys.clear();
                             List<String> chosen = new ArrayList<>();
-                            for (int i = 0; i < arr.length; i++) if (checked[i]) { xpSelectedKeys.add(arr[i]); chosen.add(arr[i]); }
-                            if (chosen.isEmpty()) { xpSelectedKeys.add("combat"); chosen.add("combat"); }
-                            if (txtXpKeys != null) txtXpKeys.setText("(" + String.join(", ", chosen) + ")");
+                            for (int i = 0; i < arr.length; i++) {
+                                if (checked[i]) {
+                                    xpSelectedKeys.add(arr[i]);
+                                    chosen.add(arr[i]);
+                                }
+                            }
+                            if (chosen.isEmpty()) {
+                                xpSelectedKeys.add("combat");
+                                chosen.add("combat");
+                            }
+                            if (txtXpKeys != null) {
+                                txtXpKeys.setText("(" + String.join(", ", chosen) + ")");
+                            }
                         })
                         .setNegativeButton("Cancel", null)
                         .show();
