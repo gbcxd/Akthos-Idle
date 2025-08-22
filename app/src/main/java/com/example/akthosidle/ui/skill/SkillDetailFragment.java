@@ -15,6 +15,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.DialogFragment;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.MutableLiveData;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -24,10 +25,6 @@ import com.example.akthosidle.domain.model.Action;
 import com.example.akthosidle.domain.model.PlayerCharacter;
 import com.example.akthosidle.domain.model.SkillId;
 import com.example.akthosidle.engine.ActionEngine;
-
-import androidx.lifecycle.MutableLiveData;
-
-
 
 import java.util.ArrayList;
 import java.util.List;

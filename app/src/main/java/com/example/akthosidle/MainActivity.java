@@ -26,9 +26,6 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
-// IMPORTANT: use your app's BuildConfig, not Firebase's.
-import com.example.akthosidle.BuildConfig;
-
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.HashMap;

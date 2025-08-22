@@ -8,7 +8,7 @@ import androidx.annotation.Nullable;
 import androidx.lifecycle.MutableLiveData;
 
 import com.example.akthosidle.data.dtos.InventoryItem;
-import com.example.akthosidle.data.tracking.ExpTracker; // XP/hour tracker
+import com.example.akthosidle.data.tracking.ExpTracker;
 import com.example.akthosidle.domain.model.Action;
 import com.example.akthosidle.domain.model.EquipmentSlot;
 import com.example.akthosidle.domain.model.Item;
@@ -118,6 +118,33 @@ public class GameRepository {
                     if (it.slot != null) it.slot = it.slot.toUpperCase();
                     it.rarity = o.optString("rarity", null);
                     if (o.has("heal")) it.heal = o.optInt("heal");
+
+                    // NEW: parse stats if present
+                    JSONObject s = o.optJSONObject("stats");
+                    if (s != null) {
+                        it.stats = new Stats(
+                                s.optInt("attack", 0),
+                                s.optInt("defense", 0),
+                                s.optDouble("speed", 0.0),
+                                s.optInt("health", 0),
+                                s.optDouble("critChance", 0.0),
+                                s.optDouble("critMultiplier", 0.0)
+                        );
+                    }
+
+                    // NEW: parse skillBuffs if present
+                    JSONObject sb = o.optJSONObject("skillBuffs");
+                    if (sb != null) {
+                        it.skillBuffs = new HashMap<>();
+                        JSONArray names = sb.names();
+                        if (names != null) {
+                            for (int k = 0; k < names.length(); k++) {
+                                String key = names.optString(k, null);
+                                if (key == null) continue;
+                                it.skillBuffs.put(key.toUpperCase(), sb.optInt(key, 0));
+                            }
+                        }
+                    }
 
                     items.put(id, it);
                 }
@@ -559,7 +586,7 @@ public class GameRepository {
     }
 
     /* ============================
-     * Pending loot
+     * Pending loot (combat)
      * ============================ */
     private final List<PendingLoot> pendingLoot = new ArrayList<>();
     public final MutableLiveData<List<InventoryItem>> pendingLootLive =
@@ -641,6 +668,40 @@ public class GameRepository {
         updatePendingLootLive();
         save();
         publishCurrencies();
+    }
+
+    /* ============================
+     * Gathering: direct rewards (no pending buffer)
+     * ============================ */
+
+    /** Give a gathered ITEM straight to the bag and toast it. */
+    public void grantGatheredItem(String itemId, int qty) {
+        if (itemId == null || qty <= 0) return;
+        PlayerCharacter pc = loadOrCreatePlayer();
+        pc.addItem(itemId, qty);
+        save();
+
+        Item def = getItem(itemId);
+        String name = def != null && def.name != null ? def.name : itemId;
+        toast("+" + qty + "× " + name);
+    }
+
+    /** Give a gathered CURRENCY straight to balances and toast it. */
+    public void grantGatheredCurrency(String code, long amount) {
+        if (code == null || amount <= 0) return;
+        addCurrency(code, amount); // already saves + publishes
+        toast("+" + amount + " " + capitalize(code));
+    }
+
+    /** Convenience: decide by id format; supports "currency:xxx" or plain item id. */
+    public void grantGathered(String idOrCurrency, int qty, @Nullable String displayNameHint) {
+        if (idOrCurrency == null || qty <= 0) return;
+        if (idOrCurrency.startsWith("currency:")) {
+            String code = idOrCurrency.substring("currency:".length());
+            grantGatheredCurrency(code, qty);
+        } else {
+            grantGatheredItem(idOrCurrency, qty);
+        }
     }
 
     /* ============================

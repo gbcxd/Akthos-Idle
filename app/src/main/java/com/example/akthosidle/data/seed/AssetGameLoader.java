@@ -2,7 +2,6 @@ package com.example.akthosidle.data.seed;
 
 import android.content.Context;
 import android.content.res.AssetManager;
-import android.util.Patterns;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
