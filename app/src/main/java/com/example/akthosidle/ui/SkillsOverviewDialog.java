@@ -16,6 +16,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.DialogFragment;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -51,10 +52,11 @@ public class SkillsOverviewDialog extends DialogFragment {
                 .inflate(R.layout.dialog_skills_overview, null, false);
 
         RecyclerView rv = root.findViewById(R.id.rvSkills);
-        rv.setLayoutManager(new LinearLayoutManager(requireContext()));
+        rv.setLayoutManager(new GridLayoutManager(requireContext(), 2));
         adapter = new Adapter();
         rv.setAdapter(adapter);
         adapter.setData(buildRows());
+
 
         return new AlertDialog.Builder(requireContext())
                 .setTitle("Skills")
