@@ -1,0 +1,16 @@
+[
+  { "id":"shop_food_apple",        "itemId":"food_apple",         "name":"Apple",               "priceGold":0,  "priceSilver":25,  "stock":null },
+  { "id":"shop_pot_heal_small",    "itemId":"pot_heal_small",     "name":"Lesser Heal Potion",  "priceGold":0,  "priceSilver":80,  "stock":null },
+  { "id":"shop_pot_basic_combat",  "itemId":"pot_basic_combat",   "name":"War Draught",         "priceGold":1,  "priceSilver":50,  "stock":null },
+  { "id":"shop_pot_basic_noncombat","itemId":"pot_basic_noncombat","name":"Focus Tonic",        "priceGold":1,  "priceSilver":25,  "stock":null },
+  { "id":"shop_syrup_basic",       "itemId":"syrup_basic",        "name":"Syrup",               "priceGold":0,  "priceSilver":120, "stock":null },
+
+  { "id":"shop_wpn_rusty_sword",   "itemId":"wpn_rusty_sword",    "name":"Rusty Sword",         "priceGold":5,  "priceSilver":0,   "stock":null },
+  { "id":"shop_helm_leather_cap",  "itemId":"helm_leather_cap",   "name":"Leather Cap",         "priceGold":3,  "priceSilver":50,  "stock":null },
+
+  { "id":"shop_res_log",           "itemId":"res_log",            "name":"Log",                 "priceGold":0,  "priceSilver":15,  "stock":null },
+  { "id":"shop_res_bark",          "itemId":"res_bark",           "name":"Bark",                "priceGold":0,  "priceSilver":30,  "stock":null },
+  { "id":"shop_res_copper_ore",    "itemId":"res_copper_ore",     "name":"Copper Ore",          "priceGold":0,  "priceSilver":45,  "stock":null },
+  { "id":"shop_res_tin_ore",       "itemId":"res_tin_ore",        "name":"Tin Ore",             "priceGold":0,  "priceSilver":45,  "stock":null },
+  { "id":"shop_res_fish_shrimp",   "itemId":"res_fish_shrimp",    "name":"Shrimp",              "priceGold":0,  "priceSilver":25,  "stock":null }
+]
