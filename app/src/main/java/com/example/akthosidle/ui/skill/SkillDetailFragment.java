@@ -6,8 +6,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -16,6 +16,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.DialogFragment;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.MutableLiveData;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -25,6 +26,7 @@ import com.example.akthosidle.domain.model.Action;
 import com.example.akthosidle.domain.model.PlayerCharacter;
 import com.example.akthosidle.domain.model.SkillId;
 import com.example.akthosidle.engine.ActionEngine;
+import com.example.akthosidle.ui.GameViewModel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +40,10 @@ public class SkillDetailFragment extends Fragment {
     private ImageButton btnPickAction;
     private Button btnToggle;
 
+    // Use the shared VM & repo
+    private GameViewModel vm;
     private GameRepository repo;
+
     private ActionEngine engine;
 
     public final MutableLiveData<Boolean> battleLive = new MutableLiveData<>(false);
@@ -48,16 +53,15 @@ public class SkillDetailFragment extends Fragment {
     private boolean running = false;
 
     @Nullable @Override
-    public View onCreateView(
-            @NonNull LayoutInflater inflater,
-            @Nullable ViewGroup container,
-            @Nullable Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater,
+                             @Nullable ViewGroup container,
+                             @Nullable Bundle savedInstanceState) {
         return inflater.inflate(R.layout.fragment_skill_detail, container, false);
     }
 
     @Override
-    public void onViewCreated(@NonNull View v, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(v, savedInstanceState);
+    public void onViewCreated(@NonNull View v, @Nullable Bundle s) {
+        super.onViewCreated(v, s);
 
         // --- bind views ---
         tvSkillTitle     = v.findViewById(R.id.tvSkillTitle);
@@ -71,19 +75,14 @@ public class SkillDetailFragment extends Fragment {
 
         // Args
         String arg = requireArguments().getString(ARG_SKILL_ID, "MINING");
-        try {
-            skillId = SkillId.valueOf(arg);
-        } catch (IllegalArgumentException e) {
-            skillId = SkillId.MINING;
-        }
+        try { skillId = SkillId.valueOf(arg); } catch (IllegalArgumentException e) { skillId = SkillId.MINING; }
 
-        // Repo/setup
-        repo = new GameRepository(requireContext().getApplicationContext());
-        repo.loadDefinitions();
-        repo.loadActionsFromAssets();
-        PlayerCharacter pc = repo.loadOrCreatePlayer();
+        // 🔑 Use shared GameViewModel / repository
+        vm = new ViewModelProvider(requireActivity()).get(GameViewModel.class);
+        repo = vm.repo; // one repo instance across the app (inventory, toolbar, etc.)
 
         // Title "Mining (Lv X)"
+        PlayerCharacter pc = repo.loadOrCreatePlayer();
         int lvl = pc.getSkillLevel(skillId);
         tvSkillTitle.setText(capitalize(skillId.name().toLowerCase()) + " (Lv " + lvl + ")");
 
@@ -100,41 +99,35 @@ public class SkillDetailFragment extends Fragment {
                 startLoop();
             }
         });
-
-
     }
 
     private void startLoop() {
         if (engine == null) {
+            // pass the SHARED repo to the engine
             engine = new ActionEngine(requireContext().getApplicationContext(), repo);
             engine.setListener(new ActionEngine.Listener() {
-                @Override
-                public void onTick(@NonNull Action action, int progressPercent, long elapsedMs, long remainingMs) {
+                @Override public void onTick(@NonNull Action action, int progressPercent, long elapsedMs, long remainingMs) {
                     if (!isAdded()) return;
                     progressBar.setProgress(progressPercent);
                     tvTimer.setText(progressPercent + "%");
                 }
 
-                @Override
-                public void onActionComplete(@NonNull Action action, boolean leveledUp) {
+                @Override public void onActionComplete(@NonNull Action action, boolean leveledUp) {
                     if (!isAdded()) return;
                     tvStatus.setText((leveledUp ? "Level up! " : "Completed: ") + action.name);
 
-                    // If you want to refresh “(Lv X)” after a level-up:
                     if (leveledUp) {
                         int lvl = repo.loadOrCreatePlayer().getSkillLevel(skillId);
                         tvSkillTitle.setText(capitalize(skillId.name().toLowerCase()) + " (Lv " + lvl + ")");
                     }
                 }
 
-                @Override
-                public void onLoopStateChanged(boolean runningNow) {
+                @Override public void onLoopStateChanged(boolean runningNow) {
                     if (!isAdded()) return;
                     running = runningNow;
                     btnToggle.setText(runningNow ? getString(R.string.stop) : getString(R.string.play));
                     btnToggle.setEnabled(true);
                     if (!runningNow) {
-                        // reset UI when stopped (optional)
                         tvStatus.setText(getString(R.string.idle));
                         tvTimer.setText("0%");
                         progressBar.setProgress(0);
@@ -144,13 +137,12 @@ public class SkillDetailFragment extends Fragment {
         }
 
         tvStatus.setText(getString(R.string.gathering_fmt, selectedAction.name));
-        btnToggle.setEnabled(false); // will re-enable in onLoopStateChanged(true)
+        btnToggle.setEnabled(false);
         engine.startLoop(selectedAction); // infinite until stop()
     }
 
     private void stopLoop() {
         if (engine != null) engine.stop();
-        // UI will update in onLoopStateChanged(false); still set local state as fallback:
         running = false;
         btnToggle.setText(getString(R.string.play));
         btnToggle.setEnabled(true);
@@ -159,8 +151,7 @@ public class SkillDetailFragment extends Fragment {
         progressBar.setProgress(0);
     }
 
-    @Override
-    public void onStop() {
+    @Override public void onStop() {
         super.onStop();
         if (engine != null) engine.stop();
         running = false;
@@ -171,14 +162,10 @@ public class SkillDetailFragment extends Fragment {
         List<Action> all = repo.getActionsBySkill(skillId);
         int level = repo.loadOrCreatePlayer().getSkillLevel(skillId);
 
-        // Filter unlocked
         List<Action> unlocked = new ArrayList<>();
-        for (Action a : all) {
-            if (a != null && a.reqLevel <= level) unlocked.add(a);
-        }
+        for (Action a : all) if (a != null && a.reqLevel <= level) unlocked.add(a);
 
         if (unlocked.isEmpty()) {
-            // No actions available → show placeholder
             tvStatus.setText(getString(R.string.no_actions_available));
             return;
         }
@@ -186,11 +173,7 @@ public class SkillDetailFragment extends Fragment {
         ActionPickerDialog dlg = ActionPickerDialog.newInstance(unlocked, action -> {
             selectedAction = action;
             tvSelectedAction.setText(action.name);
-            tvActionReq.setText(
-                    getString(R.string.req_and_duration_fmt, action.reqLevel, action.durationMs / 1000)
-            );
-            // TODO: set icon when Action has icon resource
-            // btnPickAction.setImageResource(action.iconRes);
+            tvActionReq.setText(getString(R.string.req_and_duration_fmt, action.reqLevel, action.durationMs / 1000));
         });
         dlg.show(getChildFragmentManager(), "action_picker");
     }
@@ -203,7 +186,6 @@ public class SkillDetailFragment extends Fragment {
     // ---------- Grid dialog ----------
     public static class ActionPickerDialog extends DialogFragment {
         public interface OnPick { void onPick(Action a); }
-
         private static final String KEY_COUNT = "count";
         private final List<Action> data = new ArrayList<>();
         private OnPick onPick;
@@ -232,55 +214,38 @@ public class SkillDetailFragment extends Fragment {
         }
     }
 
-    // ---------- Grid adapter ----------
     private static class ActionGridAdapter extends RecyclerView.Adapter<ActionGridAdapter.VH> {
         interface Click { void onClick(Action a); }
         private final List<Action> list;
         private final Click click;
 
-        ActionGridAdapter(List<Action> list, Click click) {
-            this.list = list; this.click = click;
-        }
+        ActionGridAdapter(List<Action> list, Click click) { this.list = list; this.click = click; }
 
         static class VH extends RecyclerView.ViewHolder {
             ImageView img; TextView title;
-            VH(@NonNull View v) {
-                super(v);
-                img = v.findViewById(R.id.img);
-                title = v.findViewById(R.id.title);
-            }
+            VH(@NonNull View v) { super(v); img = v.findViewById(R.id.img); title = v.findViewById(R.id.title); }
         }
 
-        @NonNull @Override
-        public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View v = LayoutInflater.from(parent.getContext())
-                    .inflate(R.layout.item_action_icon, parent, false);
+        @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_action_icon, parent, false);
             return new VH(v);
         }
 
-        @Override
-        public void onBindViewHolder(@NonNull VH h, int pos) {
+        @Override public void onBindViewHolder(@NonNull VH h, int pos) {
             Action a = list.get(pos);
             h.title.setText(a.name);
-            // If/when you add Action icon: h.img.setImageResource(a.iconRes);
             h.itemView.setOnClickListener(v -> click.onClick(a));
         }
 
-        @Override
-        public int getItemCount() { return list.size(); }
+        @Override public int getItemCount() { return list.size(); }
     }
 
     public boolean isBattleActive() {
         Boolean v = battleLive.getValue();
         return v != null && v;
     }
-
-
     public void setBattleActive(boolean active) {
         Boolean cur = battleLive.getValue();
-        if (cur == null || cur != active) {
-            // use postValue if calling from a background thread
-            battleLive.setValue(active);
-        }
+        if (cur == null || cur != active) { battleLive.setValue(active); }
     }
 }

@@ -12,14 +12,16 @@ import androidx.annotation.WorkerThread;
 
 import com.example.akthosidle.data.repo.GameRepository;
 import com.example.akthosidle.domain.model.Action;
-import com.example.akthosidle.domain.model.PlayerCharacter;
 import com.example.akthosidle.domain.model.SkillId;
 
+import java.util.Locale;
 import java.util.Map;
 
 /**
  * Runs a chosen non-combat Action in a loop and reports progress back to the UI.
- * Threading: a single background worker thread, callbacks posted to main.
+ * - Grants gathered outputs DIRECTLY to inventory/currencies (no pending buffer)
+ * - Adds Skill XP via GameRepository (tracks XP/h and shows level-up toast)
+ * - Shows a combined toast per completion (suppressed during offline catch-up)
  */
 public class ActionEngine {
 
@@ -36,16 +38,6 @@ public class ActionEngine {
         /** Called when the loop starts/stops. */
         @MainThread
         void onLoopStateChanged(boolean running);
-    }
-
-    /** Simple value object if you want to surface item grants to the UI. */
-    public static class ItemGrant {
-        public final String itemId;
-        public final int quantity;
-        public ItemGrant(String itemId, int quantity) {
-            this.itemId = itemId;
-            this.quantity = quantity;
-        }
     }
 
     private final Context app;
@@ -67,14 +59,12 @@ public class ActionEngine {
 
     private final SharedPreferences engineSp;
 
-    // ---- constructor (public) ----
     public ActionEngine(Context context, GameRepository repo) {
         this.app = context.getApplicationContext();
         this.repo = repo;
         this.engineSp = app.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
     }
 
-    // ---- wiring ----
     public void setListener(@Nullable Listener l) { this.listener = l; }
 
     /** Start infinite loop for the given action (restarts if already running). */
@@ -135,10 +125,10 @@ public class ActionEngine {
         long elapsed = Math.max(0, now - startedAt);
         long cappedElapsed = Math.min(elapsed, MAX_OFFLINE_MS);
 
-        // Grant complete cycles from the offline window
+        // Grant complete cycles from the offline window (no toasts to avoid spam)
         long cycles = cappedElapsed / duration;
         for (long i = 0; running && i < cycles; i++) {
-            boolean leveled = grantRewardsAndXp(a);
+            boolean leveled = grantRewardsAndXp(a, /*showToast=*/false);
             postCompleted(a, leveled);
         }
 
@@ -149,9 +139,9 @@ public class ActionEngine {
 
     /** Loop forever, starting a cycle at the provided start time. */
     private void loopFromStartTime(Action a, long startTimeMs) {
+        long start = startTimeMs;
         while (running) {
             long duration = Math.max(500L, a.durationMs > 0 ? a.durationMs : 3000L);
-            long start = startTimeMs;
             long end   = start + duration;
 
             // progress updates
@@ -170,36 +160,62 @@ public class ActionEngine {
             if (!running) break;
 
             // grant rewards + xp after the bar reaches 100%
-            boolean leveled = grantRewardsAndXp(a);
+            boolean leveled = grantRewardsAndXp(a, /*showToast=*/true);
             postCompleted(a, leveled);
 
             // next cycle starts now
-            startTimeMs = SystemClock.uptimeMillis();
+            start = SystemClock.uptimeMillis();
 
             // Update persisted start to keep offline resume accurate
-            persistStart(a, startTimeMs);
+            persistStart(a, start);
         }
     }
 
     // ---- reward/xp ----
     @WorkerThread
-    private boolean grantRewardsAndXp(Action a) {
-        // Items
+    private boolean grantRewardsAndXp(Action a, boolean showToast) {
+        // Build a combined toast like: "+2× Log, +1× Bark (+5 XP)"
+        StringBuilder toastMsg = new StringBuilder();
+
+        // Outputs: direct grant to inventory or currency (supports "currency:xxx")
         if (a.outputs != null && !a.outputs.isEmpty()) {
+            boolean first = true;
             for (Map.Entry<String, Integer> e : a.outputs.entrySet()) {
-                String itemId = e.getKey();
+                String idOrCurrency = e.getKey();
                 int qty = Math.max(1, e.getValue());
-                repo.addPendingLoot(itemId, repo.itemName(itemId), qty);
+
+                // Save directly
+                repo.grantGathered(idOrCurrency, qty, null);
+
+                // Build pretty name for toast
+                String pretty;
+                if (idOrCurrency != null && idOrCurrency.startsWith("currency:")) {
+                    String code = idOrCurrency.substring("currency:".length());
+                    pretty = capitalize(code);
+                } else {
+                    pretty = repo.itemName(idOrCurrency);
+                }
+
+                if (!first) toastMsg.append(", ");
+                toastMsg.append("+").append(qty).append("× ").append(pretty);
+                first = false;
             }
-            // Immediately collect into player; or keep pending if you want a "claim" UI
-            repo.collectPendingLoot();
         }
 
-        // XP
-        PlayerCharacter pc = repo.loadOrCreatePlayer();
+        // XP: default to 5 if not provided / <= 0
+        int xp = (a.exp > 0) ? a.exp : 5;
+        boolean leveledUp = false;
         SkillId sid = a.skill;
-        boolean leveledUp = pc.addSkillExp(sid, a.exp);
-        repo.save();
+        if (sid != null && xp > 0) {
+            leveledUp = repo.addSkillExp(sid, xp);
+        }
+
+        if (showToast) {
+            final String msg = (toastMsg.length() > 0)
+                    ? (toastMsg + " (+" + xp + " XP)")
+                    : ("+" + xp + " XP");
+            main.post(() -> repo.toast(msg));
+        }
 
         return leveledUp;
     }
@@ -226,6 +242,7 @@ public class ActionEngine {
         Listener l = listener;
         if (l == null) return;
         main.post(() -> l.onTick(a, percent, elapsed, remaining));
+        // NOTE: Do not call repo.toast here; keep to completion events only.
     }
 
     private void postCompleted(Action a, boolean leveled) {
@@ -238,5 +255,10 @@ public class ActionEngine {
         Listener l = listener;
         if (l == null) return;
         main.post(() -> l.onLoopStateChanged(state));
+    }
+
+    private static String capitalize(String s) {
+        if (s == null || s.isEmpty()) return s;
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase(Locale.US);
     }
 }
