@@ -2,6 +2,8 @@ package com.example.akthosidle.data.repo;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
@@ -769,8 +771,15 @@ public class GameRepository {
     /* ============================
      * Toast Helper
      * ============================ */
-    public void toast(String msg) { Toast.makeText(app, msg, Toast.LENGTH_SHORT).show(); }
-
+    public void toast(String msg) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            Toast.makeText(app, msg, Toast.LENGTH_SHORT).show();
+        } else {
+            new Handler(Looper.getMainLooper()).post(
+                    () -> Toast.makeText(app, msg, Toast.LENGTH_SHORT).show()
+            );
+        }
+    }
     /* ============================
      * Types
      * ============================ */

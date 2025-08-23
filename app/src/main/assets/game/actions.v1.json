@@ -1,72 +1,209 @@
 [
   {
-    "id": "wood_oak",
-    "name": "Chop Oak",
+    "id": "wc_twig_tree",
+    "name": "Twig Tree",
     "skill": "WOODCUTTING",
-    "levelReq": 1,
-    "durationSec": 4.0,
-    "xp": 8,
-    "drops": [
-      { "itemId": "log_oak", "chance": 1.0, "min": 1, "max": 2 }
-    ]
+    "reqLevel": 1,
+    "durationMs": 3000,
+    "outputs": { "log_simple": 1 },
+    "exp": 5
   },
   {
-    "id": "wood_pine",
-    "name": "Chop Pine",
+    "id": "wc_small_tree",
+    "name": "Small Tree",
     "skill": "WOODCUTTING",
-    "levelReq": 5,
-    "durationSec": 5.0,
-    "xp": 12,
-    "drops": [
-      { "itemId": "log_pine", "chance": 1.0, "min": 1, "max": 2 }
-    ]
+    "reqLevel": 3,
+    "durationMs": 3500,
+    "outputs": { "log_simple": 2 },
+    "exp": 7
   },
-
   {
-    "id": "mine_copper",
-    "name": "Mine Copper",
+    "id": "wc_oak_tree",
+    "name": "Oak Tree",
+    "skill": "WOODCUTTING",
+    "reqLevel": 5,
+    "durationMs": 5000,
+    "outputs": { "log_oak": 1 },
+    "exp": 10
+  },
+  {
+    "id": "wc_oak_grove",
+    "name": "Oak Grove",
+    "skill": "WOODCUTTING",
+    "reqLevel": 8,
+    "durationMs": 5200,
+    "outputs": { "log_oak": 2 },
+    "exp": 12
+  },
+  {
+    "id": "wc_maple_tree",
+    "name": "Maple Tree",
+    "skill": "WOODCUTTING",
+    "reqLevel": 12,
+    "durationMs": 6500,
+    "outputs": { "log_maple": 1 },
+    "exp": 16
+  },
+  {
+    "id": "wc_maple_old",
+    "name": "Old Maple",
+    "skill": "WOODCUTTING",
+    "reqLevel": 15,
+    "durationMs": 7000,
+    "outputs": { "log_maple": 2 },
+    "exp": 20
+  },
+  {
+    "id": "mine_copper_vein",
+    "name": "Copper Vein",
     "skill": "MINING",
-    "levelReq": 1,
-    "durationSec": 5.0,
-    "xp": 8,
-    "drops": [
-      { "itemId": "ore_copper", "chance": 1.0, "min": 1, "max": 2 }
-    ]
+    "reqLevel": 1,
+    "durationMs": 4000,
+    "outputs": { "copper_ore": 1 },
+    "exp": 6
   },
   {
-    "id": "mine_tin",
-    "name": "Mine Tin",
+    "id": "mine_rich_copper",
+    "name": "Rich Copper Vein",
     "skill": "MINING",
-    "levelReq": 3,
-    "durationSec": 5.0,
-    "xp": 10,
-    "drops": [
-      { "itemId": "ore_tin", "chance": 1.0, "min": 1, "max": 2 }
-    ]
+    "reqLevel": 4,
+    "durationMs": 4200,
+    "outputs": { "copper_ore": 2 },
+    "exp": 8
   },
-
   {
-    "id": "fish_shrimp",
+    "id": "mine_tin_vein",
+    "name": "Tin Vein",
+    "skill": "MINING",
+    "reqLevel": 2,
+    "durationMs": 4200,
+    "outputs": { "tin_ore": 1 },
+    "exp": 7
+  },
+  {
+    "id": "mine_bronze_mix",
+    "name": "Mixed Bronze Node",
+    "skill": "MINING",
+    "reqLevel": 5,
+    "durationMs": 5000,
+    "outputs": { "copper_ore": 1, "tin_ore": 1 },
+    "exp": 12
+  },
+  {
+    "id": "mine_iron_vein",
+    "name": "Iron Vein",
+    "skill": "MINING",
+    "reqLevel": 10,
+    "durationMs": 6000,
+    "outputs": { "iron_ore": 1 },
+    "exp": 18
+  },
+  {
+    "id": "fish_shore_shrimp",
+    "name": "Shore Shrimp",
+    "skill": "FISHING",
+    "reqLevel": 1,
+    "durationMs": 3500,
+    "outputs": { "raw_shrimp": 1 },
+    "exp": 6
+  },
+  {
+    "id": "fish_net_shrimp",
     "name": "Net Shrimp",
     "skill": "FISHING",
-    "levelReq": 1,
-    "durationSec": 6.0,
-    "xp": 8,
-    "drops": [
-      { "itemId": "fish_raw_shrimp", "chance": 1.0, "min": 1, "max": 2 }
-    ]
+    "reqLevel": 3,
+    "durationMs": 3300,
+    "outputs": { "raw_shrimp": 2 },
+    "exp": 8
   },
-
+  {
+    "id": "fish_sardine",
+    "name": "Sardine",
+    "skill": "FISHING",
+    "reqLevel": 5,
+    "durationMs": 3800,
+    "outputs": { "raw_sardine": 1 },
+    "exp": 9
+  },
+  {
+    "id": "fish_trout_stream",
+    "name": "Stream Trout",
+    "skill": "FISHING",
+    "reqLevel": 8,
+    "durationMs": 4500,
+    "outputs": { "raw_trout": 1 },
+    "exp": 12
+  },
+  {
+    "id": "fish_trout_deep",
+    "name": "Deep Trout",
+    "skill": "FISHING",
+    "reqLevel": 12,
+    "durationMs": 4800,
+    "outputs": { "raw_trout": 2 },
+    "exp": 16
+  },
+  {
+    "id": "gather_berries",
+    "name": "Wild Berries",
+    "skill": "GATHERING",
+    "reqLevel": 1,
+    "durationMs": 2500,
+    "outputs": { "berries": 1 },
+    "exp": 5
+  },
   {
     "id": "gather_herbs",
-    "name": "Gather Herbs",
+    "name": "Forest Herbs",
     "skill": "GATHERING",
-    "levelReq": 1,
-    "durationSec": 4.0,
-    "xp": 6,
-    "drops": [
-      { "itemId": "herb_mint", "chance": 0.85, "min": 1, "max": 2 },
-      { "itemId": "herb_sage", "chance": 0.25, "min": 1, "max": 1 }
-    ]
+    "reqLevel": 3,
+    "durationMs": 3000,
+    "outputs": { "herb_leaf": 1 },
+    "exp": 6
+  },
+  {
+    "id": "gather_bark",
+    "name": "Strip Bark",
+    "skill": "GATHERING",
+    "reqLevel": 4,
+    "durationMs": 2800,
+    "outputs": { "bark_strip": 1 },
+    "exp": 6
+  },
+  {
+    "id": "gather_cloth_scraps",
+    "name": "Cloth Scraps",
+    "skill": "GATHERING",
+    "reqLevel": 6,
+    "durationMs": 3200,
+    "outputs": { "cloth_scrap": 1 },
+    "exp": 8
+  },
+  {
+    "id": "hunt_rabbit",
+    "name": "Hunt Rabbit",
+    "skill": "HUNTING",
+    "reqLevel": 1,
+    "durationMs": 5000,
+    "outputs": { "rabbit_hide": 1 },
+    "exp": 8
+  },
+  {
+    "id": "hunt_rabbit_field",
+    "name": "Rabbit Field",
+    "skill": "HUNTING",
+    "reqLevel": 3,
+    "durationMs": 4800,
+    "outputs": { "rabbit_hide": 2 },
+    "exp": 10
+  },
+  {
+    "id": "hunt_boar",
+    "name": "Hunt Boar",
+    "skill": "HUNTING",
+    "reqLevel": 7,
+    "durationMs": 7000,
+    "outputs": { "boar_meat": 1 },
+    "exp": 14
   }
 ]

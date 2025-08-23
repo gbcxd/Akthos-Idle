@@ -12,6 +12,7 @@ import androidx.annotation.WorkerThread;
 
 import com.example.akthosidle.data.repo.GameRepository;
 import com.example.akthosidle.domain.model.Action;
+import com.example.akthosidle.domain.model.PlayerCharacter;
 import com.example.akthosidle.domain.model.SkillId;
 
 import java.util.Locale;
@@ -19,9 +20,9 @@ import java.util.Map;
 
 /**
  * Runs a chosen non-combat Action in a loop and reports progress back to the UI.
- * - Grants gathered outputs DIRECTLY to inventory/currencies (no pending buffer)
- * - Adds Skill XP via GameRepository (tracks XP/h and shows level-up toast)
- * - Shows a combined toast per completion (suppressed during offline catch-up)
+ * - Grants gathered outputs directly (no pending buffer) without per-item toasts
+ * - Adds Skill XP without a level-up toast (but keeps XP/h tracking)
+ * - Emits a single combined toast per completion (suppressed during offline catch-up)
  */
 public class ActionEngine {
 
@@ -177,24 +178,27 @@ public class ActionEngine {
         // Build a combined toast like: "+2× Log, +1× Bark (+5 XP)"
         StringBuilder toastMsg = new StringBuilder();
 
-        // Outputs: direct grant to inventory or currency (supports "currency:xxx")
+        // Outputs: direct grant to inventory or currency (no per-item toasts)
         if (a.outputs != null && !a.outputs.isEmpty()) {
             boolean first = true;
             for (Map.Entry<String, Integer> e : a.outputs.entrySet()) {
                 String idOrCurrency = e.getKey();
                 int qty = Math.max(1, e.getValue());
 
-                // Save directly
-                repo.grantGathered(idOrCurrency, qty, null);
-
-                // Build pretty name for toast
-                String pretty;
+                // Save directly without toasting:
                 if (idOrCurrency != null && idOrCurrency.startsWith("currency:")) {
                     String code = idOrCurrency.substring("currency:".length());
-                    pretty = capitalize(code);
+                    repo.addCurrency(code, qty); // publishes balances; silent
                 } else {
-                    pretty = repo.itemName(idOrCurrency);
+                    PlayerCharacter pc = repo.loadOrCreatePlayer();
+                    pc.addItem(idOrCurrency, qty);
+                    repo.save(); // persist inventory
                 }
+
+                // Pretty name for the single combined toast
+                String pretty = (idOrCurrency != null && idOrCurrency.startsWith("currency:"))
+                        ? capitalize(idOrCurrency.substring("currency:".length()))
+                        : repo.itemName(idOrCurrency);
 
                 if (!first) toastMsg.append(", ");
                 toastMsg.append("+").append(qty).append("× ").append(pretty);
@@ -202,19 +206,23 @@ public class ActionEngine {
             }
         }
 
-        // XP: default to 5 if not provided / <= 0
+        // XP: add without triggering repository's level-up toast; keep XP/h tracking
         int xp = (a.exp > 0) ? a.exp : 5;
         boolean leveledUp = false;
         SkillId sid = a.skill;
         if (sid != null && xp > 0) {
-            leveledUp = repo.addSkillExp(sid, xp);
+            PlayerCharacter pc = repo.loadOrCreatePlayer();
+            leveledUp = pc.addSkillExp(sid, xp); // no toast here
+            repo.save();
+            // keep the XP/hour graph accurate
+            repo.xpTracker.note("skill:" + sid.name().toLowerCase(), xp);
         }
 
         if (showToast) {
             final String msg = (toastMsg.length() > 0)
                     ? (toastMsg + " (+" + xp + " XP)")
                     : ("+" + xp + " XP");
-            main.post(() -> repo.toast(msg));
+            main.post(() -> repo.toast(msg)); // one toast only, on main thread
         }
 
         return leveledUp;
@@ -242,7 +250,6 @@ public class ActionEngine {
         Listener l = listener;
         if (l == null) return;
         main.post(() -> l.onTick(a, percent, elapsed, remaining));
-        // NOTE: Do not call repo.toast here; keep to completion events only.
     }
 
     private void postCompleted(Action a, boolean leveled) {
