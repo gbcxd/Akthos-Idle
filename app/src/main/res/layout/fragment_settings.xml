@@ -1,4 +1,23 @@
-<?xml version="1.0" encoding="utf-8"?>
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="match_parent"
-    android:gravity="center" android:text="Settings" />
+<!-- fragment_settings.xml -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- other settings rows ... -->
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnOpenShop"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/open_shop"
+        app:icon="@drawable/ic_store_24"
+        app:iconPadding="8dp"
+        app:iconGravity="textStart" />
+
+
+</LinearLayout>

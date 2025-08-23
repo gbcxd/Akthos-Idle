@@ -1,0 +1,11 @@
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- other prefs ... -->
+
+    <Preference
+        android:key="pref_open_shop"
+        android:title="@string/open_shop"
+        android:summary="@string/open_shop_summary"
+        app:icon="@drawable/ic_store_24"/>
+</PreferenceScreen>

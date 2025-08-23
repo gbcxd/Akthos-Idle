@@ -16,6 +16,7 @@ import com.example.akthosidle.domain.model.EquipmentSlot;
 import com.example.akthosidle.domain.model.Item;
 import com.example.akthosidle.domain.model.Monster;
 import com.example.akthosidle.domain.model.PlayerCharacter;
+import com.example.akthosidle.domain.model.ShopEntry;
 import com.example.akthosidle.domain.model.SkillId;
 import com.example.akthosidle.domain.model.Stats;
 import com.google.gson.Gson;
@@ -43,6 +44,7 @@ public class GameRepository {
     private static final String ASSET_ITEMS    = "game/items.v1.json";
     private static final String ASSET_ACTIONS  = "game/actions.v1.json";
     private static final String ASSET_MONSTERS = "game/monsters.v1.json";
+    private static final String ASSET_SHOP     = "game/shop.v1.json";
 
     private final Context app;
     private final SharedPreferences sp;
@@ -52,6 +54,8 @@ public class GameRepository {
     public final Map<String, Item> items = new HashMap<>();
     private final Map<String, Monster> monsters = new HashMap<>();
     private final Map<String, Action> actions = new HashMap<>();
+    // Shop definitions
+    private final List<ShopEntry> shop = new ArrayList<>();
 
     // Runtime save
     private PlayerCharacter player;
@@ -77,12 +81,13 @@ public class GameRepository {
     }
 
     /* =========================================================
-     * Load static definitions (items / monsters / actions).
+     * Load static definitions (items / monsters / actions / shop).
      * ========================================================= */
     public void loadDefinitions() {
         loadItemsFromAssets();
         loadMonstersFromAssets();
         loadActionsFromAssets();
+        loadShopFromAssets(); // NEW
     }
 
     public void loadActionsFromAssets() {
@@ -121,7 +126,7 @@ public class GameRepository {
                     it.rarity = o.optString("rarity", null);
                     if (o.has("heal")) it.heal = o.optInt("heal");
 
-                    // NEW: parse stats if present
+                    // parse stats if present
                     JSONObject s = o.optJSONObject("stats");
                     if (s != null) {
                         it.stats = new Stats(
@@ -134,7 +139,7 @@ public class GameRepository {
                         );
                     }
 
-                    // NEW: parse skillBuffs if present
+                    // parse skillBuffs if present
                     JSONObject sb = o.optJSONObject("skillBuffs");
                     if (sb != null) {
                         it.skillBuffs = new HashMap<>();
@@ -165,6 +170,17 @@ public class GameRepository {
                     if (m != null && m.id != null) monsters.put(m.id, ensureMonsterDefaults(m));
                 }
             }
+        } catch (Exception ignored) {}
+    }
+
+    // NEW: load shop
+    public void loadShopFromAssets() {
+        if (!shop.isEmpty()) return;
+        try (InputStream is = app.getAssets().open(ASSET_SHOP)) {
+            String json = readStream(is);
+            Type t = new TypeToken<List<ShopEntry>>() {}.getType();
+            List<ShopEntry> list = gson.fromJson(json, t);
+            if (list != null) shop.addAll(list);
         } catch (Exception ignored) {}
     }
 
@@ -707,6 +723,110 @@ public class GameRepository {
     }
 
     /* ============================
+     * Shop API
+     * ============================ */
+
+    @Nullable
+    private ShopEntry findShopByItem(String itemId) {
+        for (ShopEntry e : shop) {
+            if (e != null && itemId.equals(e.itemId)) return e;
+        }
+        return null;
+    }
+
+    /** UI row for shop. */
+    public static class ShopRow {
+        public final String itemId;
+        public final String name;
+        public final int priceGold;
+        public final int priceSilver;
+        public final int ownedQty;
+
+        public ShopRow(String itemId, String name, int priceGold, int priceSilver, int ownedQty) {
+            this.itemId = itemId;
+            this.name = name;
+            this.priceGold = priceGold;
+            this.priceSilver = priceSilver;
+            this.ownedQty = ownedQty;
+        }
+    }
+
+    /** Snapshot with current owned counts. */
+    public List<ShopRow> getShopRows() {
+        PlayerCharacter pc = loadOrCreatePlayer();
+        List<ShopRow> out = new ArrayList<>();
+        for (ShopEntry se : shop) {
+            if (se == null || se.itemId == null) continue;
+            Item def = getItem(se.itemId);
+            String label = (se.name != null && !se.name.isEmpty()) ? se.name
+                    : (def != null && def.name != null ? def.name : se.itemId);
+            int owned = pc.bag.getOrDefault(se.itemId, 0);
+            int g = se.priceGold == null ? 0 : Math.max(0, se.priceGold);
+            int s = se.priceSilver == null ? 0 : Math.max(0, se.priceSilver);
+            out.add(new ShopRow(se.itemId, label, g, s, owned));
+        }
+        return out;
+    }
+
+    /** Try to buy qty; returns true if purchased. */
+    public boolean buyItem(String itemId, int qty) {
+        if (qty <= 0) return false;
+        ShopEntry se = findShopByItem(itemId);
+        if (se == null) { toast("Not sold here"); return false; }
+
+        long needGold = (long)(se.priceGold == null ? 0 : se.priceGold) * qty;
+        long needSilver = (long)(se.priceSilver == null ? 0 : se.priceSilver) * qty;
+
+        long haveGold = getCurrency("gold");
+        long haveSilver = getCurrency("silver");
+        if (haveGold < needGold || haveSilver < needSilver) {
+            toast("Not enough funds");
+            return false;
+        }
+
+        // deduct both
+        if (needGold > 0) spendCurrency("gold", needGold);
+        if (needSilver > 0) spendCurrency("silver", needSilver);
+
+        // add to bag
+        PlayerCharacter pc = loadOrCreatePlayer();
+        pc.addItem(itemId, qty);
+        save();
+
+        Item def = getItem(itemId);
+        String name = def != null && def.name != null ? def.name : itemId;
+        toast("Bought +" + qty + "× " + name);
+        return true;
+    }
+
+    /** Sell qty back at 25% of list price if shop carries the item. */
+    public boolean sellItem(String itemId, int qty) {
+        if (qty <= 0) return false;
+        ShopEntry se = findShopByItem(itemId);
+        if (se == null) { toast("Can't sell here"); return false; }
+
+        PlayerCharacter pc = loadOrCreatePlayer();
+        int have = pc.bag.getOrDefault(itemId, 0);
+        if (have < qty) { toast("Not enough in bag"); return false; }
+
+        // remove from bag
+        pc.bag.put(itemId, have - qty);
+        if (pc.bag.get(itemId) != null && pc.bag.get(itemId) <= 0) pc.bag.remove(itemId);
+
+        // pay back
+        long goldBack   = Math.max(0, (long)Math.floor(0.25 * (se.priceGold   == null ? 0 : se.priceGold)   * qty));
+        long silverBack = Math.max(0, (long)Math.floor(0.25 * (se.priceSilver == null ? 0 : se.priceSilver) * qty));
+        if (goldBack   > 0) addCurrency("gold", goldBack);
+        if (silverBack > 0) addCurrency("silver", silverBack);
+        save();
+
+        Item def = getItem(itemId);
+        String name = def != null && def.name != null ? def.name : itemId;
+        toast("Sold " + qty + "× " + name);
+        return true;
+    }
+
+    /* ============================
      * Currency convenience
      * ============================ */
     public long getCurrency(String id) { return loadOrCreatePlayer().getCurrency(id); }
@@ -769,7 +889,7 @@ public class GameRepository {
     }
 
     /* ============================
-     * Toast Helper
+     * Toast Helper (main-thread safe)
      * ============================ */
     public void toast(String msg) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -780,6 +900,7 @@ public class GameRepository {
             );
         }
     }
+
     /* ============================
      * Types
      * ============================ */

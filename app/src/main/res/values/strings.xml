@@ -20,4 +20,7 @@
     <string name="stop">Stop</string>
     <string name="granted_item_fmt">Granted %1$d× %2$s</string>
     <string name="app_name">Akthos Idle</string>
+
+    <string name="open_shop">Open Shop</string>
+    <string name="open_shop_summary">Buy gear, potions, and supplies</string>
 </resources>
