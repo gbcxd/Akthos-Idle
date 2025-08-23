@@ -1,11 +1,41 @@
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- other prefs ... -->
+    <PreferenceCategory android:title="Save &amp; Backup">
+        <Preference
+            android:key="manual_save"
+            android:title="Manual Save"
+            android:summary="Force a save now" />
+        <Preference
+            android:key="export_save"
+            android:title="Export Save"
+            android:summary="Copy your save JSON to clipboard" />
+        <Preference
+            android:key="import_save"
+            android:title="Import Save"
+            android:summary="Paste a JSON save to restore" />
+        <Preference
+            android:key="reset_progress"
+            android:title="Reset Progress"
+            android:summary="Erase your character and inventory" />
+    </PreferenceCategory>
 
-    <Preference
-        android:key="pref_open_shop"
-        android:title="@string/open_shop"
-        android:summary="@string/open_shop_summary"
-        app:icon="@drawable/ic_store_24"/>
+    <PreferenceCategory android:title="Gameplay (placeholders)">
+        <SwitchPreferenceCompat
+            android:key="auto_respawn"
+            android:title="Auto-respawn in battle"
+            android:summary="Automatically restart fights when you die"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            android:key="autoscroll_log"
+            android:title="Auto-scroll combat log"
+            android:defaultValue="true" />
+        <ListPreference
+            android:key="xp_window"
+            android:title="XP/Hour Window"
+            android:entries="@array/xp_window_labels"
+            android:entryValues="@array/xp_window_values"
+            android:defaultValue="3600000" />
+    </PreferenceCategory>
+
 </PreferenceScreen>
