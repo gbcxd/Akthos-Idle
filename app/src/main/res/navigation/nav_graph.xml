@@ -29,7 +29,6 @@
         android:name="com.example.akthosidle.ui.SkillsFragment"
         android:label="Skills"
         tools:layout="@layout/fragment_skills">
-
         <action
             android:id="@+id/action_nav_skills_to_skillDetail"
             app:destination="@id/skillDetailFragment" />
@@ -46,21 +45,21 @@
             android:defaultValue="MINING" />
     </fragment>
 
-    <!-- The bottom-tab “Settings” now opens Basecamp -->
+    <!-- Bottom tab “Settings” actually opens Basecamp -->
     <fragment
         android:id="@+id/nav_settings"
         android:name="com.example.akthosidle.ui.basecampFragment"
         android:label="Basecamp"
         tools:layout="@layout/fragment_basecamp" />
 
-    <!-- Store / Shop (provide both ids; Basecamp uses storeFragment) -->
+    <!-- Store / Shop -->
     <fragment
-        android:id="@+id/storeFragment"
+        android:id="@+id/shopFragment"
         android:name="com.example.akthosidle.ui.store.shopFragment"
         android:label="Shop"
         tools:layout="@layout/fragment_shop" />
 
-    <!-- Gold purchase from toolbar + in shop -->
+    <!-- Buy Gold (toolbar + shop) -->
     <fragment
         android:id="@+id/buyGoldFragment"
         android:name="com.example.akthosidle.ui.store.BuyGoldFragment"
@@ -92,7 +91,7 @@
         android:label="Forge"
         tools:layout="@layout/fragment_forge" />
 
-    <!-- Options (actual settings/backup screen) -->
+    <!-- Options (settings/backup) -->
     <fragment
         android:id="@+id/optionsFragment"
         android:name="com.example.akthosidle.ui.OptionsFragment"
@@ -105,5 +104,4 @@
         android:name="com.example.akthosidle.ui.aboutFragment"
         android:label="About"
         tools:layout="@layout/fragment_about" />
-
 </navigation>

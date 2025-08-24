@@ -46,14 +46,15 @@ public class basecampFragment extends Fragment {
 
     private List<Tile> buildTiles() {
         List<Tile> list = new ArrayList<>();
-        // Put all *non-core* entries here
-        list.add(new Tile("Shop", android.R.drawable.ic_menu_shop, R.id.shopFragment));
-        list.add(new Tile("Quests", android.R.drawable.ic_menu_agenda, R.id.questsFragment));
-        list.add(new Tile("Achievements", android.R.drawable.ic_menu_myplaces, R.id.achievementsFragment));
-        list.add(new Tile("Bank", android.R.drawable.ic_menu_slideshow, R.id.bankFragment));
-        list.add(new Tile("Forge", android.R.drawable.ic_menu_manage, R.id.forgeFragment));
-        list.add(new Tile("Settings", android.R.drawable.ic_menu_preferences, R.id.settingsFragment)); // separate screen
-        list.add(new Tile("About", android.R.drawable.ic_menu_help, R.id.aboutFragment));
+
+        list.add(new Tile("Shop",         android.R.drawable.ic_menu_view,         R.id.shopFragment));
+        list.add(new Tile("Quests",       android.R.drawable.ic_menu_agenda,       R.id.questsFragment));
+        list.add(new Tile("Achievements", android.R.drawable.ic_menu_myplaces,     R.id.achievementsFragment));
+        list.add(new Tile("Bank",         android.R.drawable.ic_menu_slideshow,    R.id.bankFragment));
+        list.add(new Tile("Forge",        android.R.drawable.ic_menu_manage,       R.id.forgeFragment));
+        list.add(new Tile("Options",      android.R.drawable.ic_menu_preferences,  R.id.optionsFragment));
+        list.add(new Tile("About",        android.R.drawable.ic_menu_info_details, R.id.aboutFragment));
+
         return list;
     }
 
