@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
+/** Central game repository (definitions + save + live state). */
 public class GameRepository {
 
     private static final String SP_NAME = "akthos_idle_save";
@@ -52,10 +53,13 @@ public class GameRepository {
     private static final String ASSET_ACTIONS  = "game/actions.v1.json";
     private static final String ASSET_MONSTERS = "game/monsters.v1.json";
     private static final String ASSET_SHOP     = "game/shop.v1.json";
+    private static final String ASSET_SLAYER   = "game/slayer.v1.json"; // NEW
 
-    // ▶️ Slayer costs (tweak as desired)
-    private static final int SLAYER_ROLL_COST    = 0;
-    private static final int SLAYER_ABANDON_COST = 2;
+    // Slayer fallback values if JSON is missing
+    private static final int    SLAYER_ROLL_COST_FALLBACK        = 5;
+    private static final int    SLAYER_ABANDON_COST_FALLBACK     = 2;
+    private static final double SLAYER_BONUS_PER_KILL_FALLBACK   = 0.25; // required/4
+    private static final int    SLAYER_MIN_BONUS_FALLBACK        = 10;
 
     private final Context app;
     private final SharedPreferences sp;
@@ -115,12 +119,13 @@ public class GameRepository {
     }
 
     /* =========================================================
-     * Load static definitions (items / monsters / actions / shop).
+     * Load static definitions (items / monsters / actions / slayer / shop).
      * ========================================================= */
     public void loadDefinitions() {
         loadItemsFromAssets();
         loadMonstersFromAssets();
         loadActionsFromAssets();
+        loadSlayerFromAssets();     // NEW (reads assets/game/slayer.v1.json)
         loadShopFromAssets();
     }
 
@@ -204,7 +209,7 @@ public class GameRepository {
                     if (m != null && m.id != null) monsters.put(m.id, ensureMonsterDefaults(m));
                 }
             }
-            // Default Slayer region (Basecamp) includes all monsters unless you register others
+            // create a default region if no JSON will be present (safety)
             if (slayerRegions.isEmpty() && !monsters.isEmpty()) {
                 slayerRegions.put("basecamp",
                         new SlayerRegion("basecamp", "Basecamp", new ArrayList<>(monsters.keySet())));
@@ -224,8 +229,10 @@ public class GameRepository {
     }
 
     /* ============================
-     * Slayer regions registry
+     * Slayer regions registry + JSON config
      * ============================ */
+
+    // in-memory registry used by the game
     public static class SlayerRegion {
         public final String id;
         public final String label;
@@ -246,6 +253,116 @@ public class GameRepository {
         for (String mid : monsterIds) if (monsters.containsKey(mid)) filtered.add(mid);
         if (filtered.isEmpty()) return;
         slayerRegions.put(id, new SlayerRegion(id, label, filtered));
+    }
+
+    // ---- JSON config model (assets/game/slayer.v1.json) ----
+    @Nullable private SlayerCfg slayerCfg;
+
+    private static class SlayerCfg {
+        @Nullable Costs costs;
+        @Nullable KillCountCfg killCount;
+        @Nullable List<RegionCfg> regions;
+    }
+    private static class Costs {
+        @Nullable Integer roll;
+        @Nullable Integer abandon;
+        @Nullable Double  completionBonusPerKill;
+        @Nullable Integer minCompletionBonus;
+    }
+    private static class KillCountCfg {
+        int minBase = 100;
+        int maxBase = 150;
+        double bumpPerCombatLevel = 0.5;
+        int maxBump = 50;
+    }
+    private static class RegionCfg {
+        String id;
+        String label;
+        List<String> monsters;
+        @Nullable Costs costs;
+        @Nullable KillCountCfg killCount;
+    }
+
+    private void loadSlayerFromAssets() {
+        try (InputStream is = app.getAssets().open(ASSET_SLAYER)) {
+            String json = readStream(is);
+            slayerCfg = gson.fromJson(json, SlayerCfg.class);
+            if (slayerCfg != null && slayerCfg.regions != null) {
+                for (RegionCfg r : slayerCfg.regions) {
+                    if (r == null || r.id == null || r.label == null || r.monsters == null) continue;
+                    List<String> filtered = new ArrayList<>();
+                    for (String mid : r.monsters) if (monsters.containsKey(mid)) filtered.add(mid);
+                    if (!filtered.isEmpty()) {
+                        slayerRegions.put(r.id, new SlayerRegion(r.id, r.label, filtered));
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // If JSON missing, keep fallback created after monsters load.
+        }
+
+        // still ensure at least one region exists
+        if (slayerRegions.isEmpty() && !monsters.isEmpty()) {
+            slayerRegions.put("basecamp",
+                    new SlayerRegion("basecamp", "Basecamp", new ArrayList<>(monsters.keySet())));
+        }
+    }
+
+    // helpers to fetch effective costs & rules (region override > global > fallback)
+    @Nullable private RegionCfg getRegionCfg(@Nullable String regionId) {
+        if (regionId == null || slayerCfg == null || slayerCfg.regions == null) return null;
+        for (RegionCfg r : slayerCfg.regions) if (r != null && regionId.equals(r.id)) return r;
+        return null;
+    }
+    private int effectiveRollCost(@Nullable String regionId) {
+        RegionCfg r = getRegionCfg(regionId);
+        if (r != null && r.costs != null && r.costs.roll != null) return Math.max(0, r.costs.roll);
+        if (slayerCfg != null && slayerCfg.costs != null && slayerCfg.costs.roll != null)
+            return Math.max(0, slayerCfg.costs.roll);
+        return SLAYER_ROLL_COST_FALLBACK;
+    }
+    private int effectiveAbandonCost(@Nullable String regionId) {
+        RegionCfg r = getRegionCfg(regionId);
+        if (r != null && r.costs != null && r.costs.abandon != null) return Math.max(0, r.costs.abandon);
+        if (slayerCfg != null && slayerCfg.costs != null && slayerCfg.costs.abandon != null)
+            return Math.max(0, slayerCfg.costs.abandon);
+        return SLAYER_ABANDON_COST_FALLBACK;
+    }
+    private int computeCompletionBonus(int required, @Nullable String regionId) {
+        double perKill = SLAYER_BONUS_PER_KILL_FALLBACK;
+        int minBonus = SLAYER_MIN_BONUS_FALLBACK;
+
+        RegionCfg r = getRegionCfg(regionId);
+        if (r != null && r.costs != null) {
+            if (r.costs.completionBonusPerKill != null) perKill = r.costs.completionBonusPerKill;
+            if (r.costs.minCompletionBonus != null)    minBonus = r.costs.minCompletionBonus;
+        } else if (slayerCfg != null && slayerCfg.costs != null) {
+            if (slayerCfg.costs.completionBonusPerKill != null) perKill = slayerCfg.costs.completionBonusPerKill;
+            if (slayerCfg.costs.minCompletionBonus != null)     minBonus = slayerCfg.costs.minCompletionBonus;
+        }
+        int byRate = (int) Math.floor(required * Math.max(0.0, perKill));
+        return Math.max(minBonus, byRate);
+    }
+    private int rollKillCountForLevel(int combatLevel, @Nullable String regionId) {
+        int minBase = 100, maxBase = 150, maxBump = 50; double bumpPerCL = 0.5;
+
+        KillCountCfg kc = null;
+        RegionCfg r = getRegionCfg(regionId);
+        if (r != null && r.killCount != null) kc = r.killCount;
+        else if (slayerCfg != null && slayerCfg.killCount != null) kc = slayerCfg.killCount;
+
+        if (kc != null) {
+            minBase = kc.minBase;
+            maxBase = kc.maxBase;
+            bumpPerCL = kc.bumpPerCombatLevel;
+            maxBump = kc.maxBump;
+        }
+
+        int bump = Math.min(maxBump, (int) Math.floor(combatLevel * bumpPerCL));
+        int min = minBase + bump;
+        int max = maxBase + bump;
+        if (min > max) { int t = min; min = max; max = t; }
+        return min + rng.nextInt((max - min) + 1);
     }
 
     /* ============================
@@ -272,9 +389,7 @@ public class GameRepository {
     private static int xpAtStartOfLevel(int lvl) {
         int x = 0;
         int L = Math.max(1, lvl);
-        for (int i = 1; i < L; i++) {
-            x += PlayerCharacter.xpForNextLevel(i);
-        }
+        for (int i = 1; i < L; i++) x += PlayerCharacter.xpForNextLevel(i);
         return x;
     }
 
@@ -571,33 +686,31 @@ public class GameRepository {
     }
 
     /* ============================
-     * Slayer API
+     * Slayer API (assignment + JSON rules + coins)
      * ============================ */
 
     private void publishSlayer(@Nullable SlayerAssignment a) {
         slayerLive.postValue(a);
     }
-
     private void persistSlayerToSp(@Nullable SlayerAssignment a) {
         SharedPreferences.Editor ed = sp.edit();
-        if (a == null) {
-            ed.remove(KEY_SLAYER_JSON);
-        } else {
-            ed.putString(KEY_SLAYER_JSON, gson.toJson(a));
-        }
+        if (a == null) ed.remove(KEY_SLAYER_JSON);
+        else ed.putString(KEY_SLAYER_JSON, gson.toJson(a));
         ed.apply();
     }
-
     public @Nullable SlayerAssignment getSlayerAssignment() {
         loadSlayerFromSpIfPresent();
         return slayerLive.getValue();
     }
 
-    /** Assign a task with custom label (e.g., Region — Monster). */
-    public void assignSlayerTask(String monsterId, int required, int completionBonus, @Nullable String label) {
+    /** Assign a task (stores regionId) */
+    public void assignSlayerTask(String regionId, String monsterId, int required, int completionBonus, @Nullable String label) {
+        Monster m = getMonster(monsterId);
+        String fallback = (m != null && m.name != null) ? m.name : monsterId;
         SlayerAssignment a = new SlayerAssignment(
+                regionId,
                 monsterId,
-                (label != null ? label : (getMonster(monsterId) != null ? getMonster(monsterId).name : monsterId)),
+                (label != null ? label : fallback),
                 Math.max(1, required),
                 Math.max(0, completionBonus)
         );
@@ -606,22 +719,21 @@ public class GameRepository {
         toast("Slayer task: " + a.label + " ×" + a.required);
     }
 
-    /** Back-compat overload. */
+    /** Back-compat overload (no region label) */
     public void assignSlayerTask(String monsterId, int required, int completionBonus) {
-        Monster m = getMonster(monsterId);
-        assignSlayerTask(monsterId, required, completionBonus, m != null ? m.name : monsterId);
+        assignSlayerTask("basecamp", monsterId, required, completionBonus, null);
     }
 
     public void clearSlayerTask() {
         persistSlayerToSp(null);
         publishSlayer(null);
-        toast("Slayer task cleared");
     }
 
     /**
-     * Called by CombatEngine when a monster dies.
-     * Increments progress if it matches the active task.
-     * NOTE: Completion bonus is ONLY paid when claiming at the NPC.
+     * Called by CombatEngine when a monster dies:
+     * - Increments progress if it matches the active task
+     * - Grants per-kill Slayer coins (Monster.slayerReward) while task is active
+     * - If finished: just toast; actual coin reward is granted when the player claims
      */
     public void onMonsterKilled(@Nullable String monsterId) {
         if (monsterId == null) return;
@@ -629,7 +741,7 @@ public class GameRepository {
         if (a == null || a.isComplete()) return;
         if (!monsterId.equals(a.monsterId)) return;
 
-        // Optional: per-kill Slayer coins if the monster defines it
+        // Per-kill Slayer coins (only while on task)
         Monster m = getMonster(monsterId);
         if (m != null && m.slayerReward > 0) {
             addCurrency("slayer", m.slayerReward);
@@ -641,127 +753,8 @@ public class GameRepository {
         publishSlayer(a);
 
         if (a.isComplete()) {
-            // Don’t pay bonus here—avoid double reward
-            toast("Task complete! Claim your reward from the Slayer Master.");
+            toast("Task complete — claim your reward!");
         }
-    }
-
-    /**
-     * Rolls a new Slayer task in the default region ("basecamp"), charging Slayer coins.
-     * Won’t replace an active task unless forceReplace == true.
-     */
-    @Nullable
-    public SlayerAssignment rollNewSlayerTask() {
-        return rollNewSlayerTask(false);
-    }
-
-    @Nullable
-    public SlayerAssignment rollNewSlayerTask(boolean forceReplace) {
-        return rollNewSlayerTask("basecamp", forceReplace);
-    }
-
-    @Nullable
-    public SlayerAssignment rollNewSlayerTask(String regionId, boolean forceReplace) {
-        SlayerAssignment cur = getSlayerAssignment();
-        if (cur != null && !cur.isComplete() && !forceReplace) {
-            toast("Finish or abandon your current task first.");
-            return cur;
-        }
-
-        // Validate region before charging
-        SlayerRegion reg = slayerRegions.get(regionId);
-        if (reg == null || reg.monsterIds == null || reg.monsterIds.isEmpty()) {
-            toast("No Slayer monsters in this region yet.");
-            return cur;
-        }
-
-        // Charge roll cost
-        if (!spendCurrency("slayer", SLAYER_ROLL_COST)) {
-            toast("Need " + SLAYER_ROLL_COST + " Slayer coins.");
-            return cur;
-        }
-
-        // Pick a monster & required kills based on combat level
-        String monsterId = reg.monsterIds.get(rng.nextInt(reg.monsterIds.size()));
-        Monster m = getMonster(monsterId);
-        int cl = getCombatLevel();
-        int required = rollKillCountForLevel(cl);
-        int completionBonus = Math.max(10, required / 4);
-        String label = reg.label + " — " + (m != null && m.name != null ? m.name : monsterId);
-
-        assignSlayerTask(monsterId, required, completionBonus, label);
-        toast("New task rolled (−" + SLAYER_ROLL_COST + " Slayer).");
-        return slayerLive.getValue();
-    }
-
-    /**
-     * Abandons the current Slayer task, charging Slayer coins.
-     * Returns true if abandoned.
-     */
-    public boolean abandonSlayerTask() {
-        SlayerAssignment a = getSlayerAssignment();
-        if (a == null) {
-            toast("No Slayer task to abandon.");
-            return false;
-        }
-        if (!spendCurrency("slayer", SLAYER_ABANDON_COST)) {
-            toast("Need " + SLAYER_ABANDON_COST + " Slayer coins to abandon.");
-            return false;
-        }
-        clearSlayerTask();
-        toast("Task abandoned (−" + SLAYER_ABANDON_COST + " Slayer).");
-        return true;
-    }
-
-    /**
-     * Claims the Slayer task reward (Slayer coins) if complete and clears the task.
-     * Returns true if claimed.
-     */
-    public boolean claimSlayerTaskIfComplete() {
-        SlayerAssignment a = getSlayerAssignment();
-        if (a == null) {
-            toast("No Slayer task active.");
-            return false;
-        }
-        if (!a.isComplete()) {
-            toast("Task not complete yet.");
-            return false;
-        }
-        int reward = (a.completionBonus > 0) ? a.completionBonus : Math.max(10, a.required / 4);
-        addCurrency("slayer", reward);
-        toast("Task reward: +" + reward + " Slayer!");
-        clearSlayerTask(); // also persists & publishes
-        return true;
-    }
-
-    /**
-     * Existing helper to request/roll a task by region without costs (kept for other callers).
-     * You can still use it in tools/cheats; UI should prefer rollNewSlayerTask().
-     */
-    @Nullable
-    public SlayerAssignment requestSlayerTaskFromNpc(String regionId, boolean overwriteExisting) {
-        SlayerAssignment current = slayerLive.getValue();
-        if (current != null && !current.isComplete() && !overwriteExisting) {
-            toast("Finish your current Slayer task first.");
-            return current;
-        }
-
-        SlayerRegion reg = slayerRegions.get(regionId);
-        if (reg == null || reg.monsterIds.isEmpty()) {
-            toast("No Slayer monsters in this region yet.");
-            return null;
-        }
-
-        String monsterId = reg.monsterIds.get(rng.nextInt(reg.monsterIds.size()));
-        Monster m = getMonster(monsterId);
-
-        int cl = getCombatLevel();
-        int required = rollKillCountForLevel(cl);
-        int completionBonus = Math.max(10, required / 4);
-        String label = reg.label + " — " + (m != null ? m.name : monsterId);
-
-        assignSlayerTask(monsterId, required, completionBonus, label);
-        return slayerLive.getValue();
     }
 
     // Simple “combat level” scaler (not OSRS-accurate; good enough for task sizing)
@@ -781,13 +774,71 @@ public class GameRepository {
         return out;
     }
 
-    // 100..200 scaled by combat level (CL=1 ~100..150, CL~99 ~150..200)
-    private int rollKillCountForLevel(int combatLevel) {
-        int bump = Math.min(50, (int)Math.floor(combatLevel * 0.5)); // 0..50
-        int min = 100 + bump;   // 100..150
-        int max = 150 + bump;   // 150..200
-        if (min > max) { int t = min; min = max; max = t; }
-        return min + rng.nextInt((max - min) + 1);
+    /* ---- Public API used by the Slayer Master NPC / Basecamp UI ---- */
+
+    /** Roll a task in the default region. */
+    @Nullable public SlayerAssignment rollNewSlayerTask() { return rollNewSlayerTask("basecamp", false); }
+    /** Roll a task in the default region, optionally forcing replace. */
+    @Nullable public SlayerAssignment rollNewSlayerTask(boolean forceReplace) { return rollNewSlayerTask("basecamp", forceReplace); }
+
+    /** Roll a task for a region. Costs Slayer coins from JSON (or fallback). */
+    @Nullable
+    public SlayerAssignment rollNewSlayerTask(String regionId, boolean forceReplace) {
+        SlayerAssignment cur = getSlayerAssignment();
+        if (cur != null && !cur.isComplete() && !forceReplace) {
+            toast("Finish or abandon your current task first.");
+            return cur;
+        }
+
+        SlayerRegion reg = slayerRegions.get(regionId);
+        if (reg == null || reg.monsterIds == null || reg.monsterIds.isEmpty()) {
+            toast("No Slayer monsters in this region yet.");
+            return cur;
+        }
+
+        int rollCost = effectiveRollCost(regionId);
+        if (!spendCurrency("slayer", rollCost)) {
+            toast("Need " + rollCost + " Slayer coins.");
+            return cur;
+        }
+
+        String monsterId = reg.monsterIds.get(rng.nextInt(reg.monsterIds.size()));
+        Monster m = getMonster(monsterId);
+        int required = rollKillCountForLevel(getCombatLevel(), regionId);
+        int completionBonus = computeCompletionBonus(required, regionId);
+        String label = reg.label + " — " + (m != null && m.name != null ? m.name : monsterId);
+
+        assignSlayerTask(regionId, monsterId, required, completionBonus, label);
+        toast("New task rolled (−" + rollCost + " Slayer).");
+        return slayerLive.getValue();
+    }
+
+    /** Abandon current task. Costs per-region Slayer coins from JSON (or fallback). */
+    public boolean abandonSlayerTask() {
+        SlayerAssignment a = getSlayerAssignment();
+        if (a == null) { toast("No Slayer task to abandon."); return false; }
+
+        int cost = effectiveAbandonCost(a.regionId);
+        if (!spendCurrency("slayer", cost)) {
+            toast("Need " + cost + " Slayer coins to abandon.");
+            return false;
+        }
+        clearSlayerTask();
+        toast("Task abandoned (−" + cost + " Slayer).");
+        return true;
+    }
+
+    /** Claim reward if task complete. Pays the precomputed (or computed) bonus. */
+    public boolean claimSlayerTaskIfComplete() {
+        SlayerAssignment a = getSlayerAssignment();
+        if (a == null) { toast("No Slayer task active."); return false; }
+        if (!a.isComplete()) { toast("Task not complete yet."); return false; }
+
+        int reward = a.completionBonus > 0 ? a.completionBonus : computeCompletionBonus(a.required, a.regionId);
+        addCurrency("slayer", reward);
+        toast("Task reward: +" + reward + " Slayer!");
+        clearSlayerTask();
+        return true;
     }
 
     /* ============================
@@ -919,6 +970,7 @@ public class GameRepository {
     /* ============================
      * Equipment API (Inventory)
      * ============================ */
+    /** Equip an item from the bag into its slot. Returns true if it equipped. */
     public boolean equip(String itemId) {
         PlayerCharacter pc = loadOrCreatePlayer();
         Item it = getItem(itemId);
@@ -929,12 +981,15 @@ public class GameRepository {
         Integer have = pc.bag.get(itemId);
         if (have == null || have <= 0) { toast("You don't have that item"); return false; }
 
+        // Remove from bag
         pc.bag.put(itemId, have - 1);
         if (pc.bag.get(itemId) != null && pc.bag.get(itemId) <= 0) pc.bag.remove(itemId);
 
+        // Swap with currently equipped
         String prev = pc.equipment.put(slot, itemId);
         if (prev != null) pc.addItem(prev, 1);
 
+        // Clamp HP if max reduced
         int maxHp = totalStats().health;
         if (pc.currentHp == null) pc.currentHp = maxHp;
         if (pc.currentHp > maxHp) pc.currentHp = maxHp;
@@ -945,6 +1000,7 @@ public class GameRepository {
         return true;
     }
 
+    /** Unequip whatever is in the slot back to the bag. */
     public boolean unequip(EquipmentSlot slot) {
         PlayerCharacter pc = loadOrCreatePlayer();
         if (slot == null) return false;
@@ -1009,8 +1065,8 @@ public class GameRepository {
     private boolean isCombatSkill(String skill) {
         if (skill == null) return false;
         String k = skill.toUpperCase();
-        return k.equals("ATTACK") || k.equals("STRENGTH") || k.equals("DEFENSE") || k.equals("HP") ||
-                k.equals("ARCHERY") || k.equals("MAGIC");
+        return k.equals("ATTACK") || k.equals("STRENGTH") || k.equals("DEFENSE") || k.equals("HP")
+                || k.equals("ARCHERY") || k.equals("MAGIC");
     }
 
     /* ============================
@@ -1294,6 +1350,7 @@ public class GameRepository {
 
     /** ---------- Helpers expected by SkillDetailFragment ---------- */
 
+    /** Compat: check unlock using a provided level. */
     public boolean isUnlocked(@Nullable Action a, int currentLevel) {
         if (a == null) return false;
         int req = Math.max(1, a.reqLevel);
@@ -1301,12 +1358,17 @@ public class GameRepository {
         return lvl >= req;
     }
 
+    /** True if the player meets this action’s level requirement. */
     public boolean isUnlocked(@Nullable Action a) {
         if (a == null || a.skill == null) return false;
         int playerLevel = skillLevel(a.skill);
         return isUnlocked(a, playerLevel);
     }
 
+    /**
+     * Returns the best unlocked (highest reqLevel) action for this skill
+     * given an explicit current level, or null if none are unlocked yet.
+     */
     @Nullable
     public Action bestUnlockedFor(@Nullable SkillId skill, int currentLevel) {
         if (skill == null) return null;
@@ -1323,20 +1385,30 @@ public class GameRepository {
         return best;
     }
 
+    /**
+     * Returns the best unlocked (highest reqLevel) action for this skill using the player's current level,
+     * or null if none are unlocked yet.
+     */
     @Nullable
     public Action bestUnlockedFor(@Nullable SkillId skill) {
         if (skill == null) return null;
         return bestUnlockedFor(skill, skillLevel(skill));
     }
 
+    /** Persist the last-picked action for UX. */
     public void setLastPickedAction(@Nullable SkillId skill, @Nullable String actionId) {
         saveLastActionForSkill(skill, actionId);
     }
 
+    /** Convenience overload. */
     public void setLastPickedAction(@Nullable Action a) {
         if (a != null) saveLastActionForSkill(a.skill, a.id);
     }
 
+    /**
+     * Returns the last-picked Action for this skill if present and still unlocked.
+     * Otherwise falls back to the best currently unlocked action. May return null.
+     */
     @Nullable
     public Action getLastPickedAction(@Nullable SkillId skill) {
         if (skill == null) return null;

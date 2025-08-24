@@ -1,0 +1,21 @@
+{
+  "costs": {
+    "roll": 5,
+    "abandon": 2,
+    "completionBonusPerKill": 0.25,
+    "minCompletionBonus": 10
+  },
+  "killCount": {
+    "minBase": 100,
+    "maxBase": 150,
+    "bumpPerCombatLevel": 0.5,
+    "maxBump": 50
+  },
+  "regions": [
+    {
+      "id": "basecamp",
+      "label": "Basecamp",
+      "monsters": ["shadow_thief", "goblin", "wolf"]
+    }
+  ]
+}
