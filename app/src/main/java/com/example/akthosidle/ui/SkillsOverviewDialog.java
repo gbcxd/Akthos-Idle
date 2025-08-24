@@ -20,14 +20,13 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.akthosidle.R;
-import com.example.akthosidle.domain.model.Skill;
+import com.example.akthosidle.domain.model.PlayerCharacter;
 import com.example.akthosidle.domain.model.SkillId;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 /** Long-press Skills tab => shows all skills with XP bars (cur/req). */
 public class SkillsOverviewDialog extends DialogFragment {
@@ -56,7 +55,6 @@ public class SkillsOverviewDialog extends DialogFragment {
         rv.setAdapter(adapter);
         adapter.setData(buildRows());
 
-
         return new AlertDialog.Builder(requireContext())
                 .setTitle("Skills")
                 .setView(root)
@@ -77,23 +75,23 @@ public class SkillsOverviewDialog extends DialogFragment {
     /* ---------- data shaping ---------- */
 
     private List<Row> buildRows() {
-        Map<SkillId, Skill> map = vm.player().skills;
-        if (map == null) map = new EnumMap<>(SkillId.class);
+        PlayerCharacter pc = vm.player();
+        EnumMap<SkillId, Integer> xpMap =
+                (pc.skills != null) ? pc.skills : new EnumMap<>(SkillId.class);
 
         List<Row> rows = new ArrayList<>();
         for (SkillId id : SkillId.values()) {
-            Skill s = map.get(id);
-            int lvl = (s != null) ? s.level : 1;
-            int cur = (s != null) ? s.exp : 0;   // <-- if your field is "xp", rename to s.xp
-            int req = reqForLevel(lvl);
+            int xp    = xpMap.getOrDefault(id, 0);
+            int lvl   = PlayerCharacter.levelForExp(xp);
+            int cur   = PlayerCharacter.xpIntoLevel(xp, lvl);
+            int req   = PlayerCharacter.xpForNextLevel(lvl);
+
+            // Optional: at max level, pin bar to full to avoid odd visuals
+            if (req <= 0) { req = 1; cur = 1; }
+
             rows.add(new Row(id, iconFor(id), pretty(id.name()), lvl, cur, req));
         }
         return rows;
-    }
-
-    /** Very simple curve; replace if you already have a central formula. */
-    private int reqForLevel(int lvl) {
-        return 50 + (25 * Math.max(1, lvl));  // e.g., L1→75, L2→100, …
     }
 
     private static String pretty(String enumName) {
@@ -109,20 +107,22 @@ public class SkillsOverviewDialog extends DialogFragment {
             case ARCHERY: return R.drawable.ic_shield;
             case MAGIC: return R.drawable.ic_shield;
             case HP: return R.drawable.ic_heart;
+
             case WOODCUTTING: return R.drawable.ic_skill_woodcutting;
-            case MINING: return R.drawable.ic_skill_mining;
-            case FISHING: return R.drawable.ic_skill_fishing;
-            case GATHERING: return R.drawable.ic_skill_gathering;
-            case HUNTING: return R.drawable.ic_skill_hunting;
-            case CRAFTING: return R.drawable.ic_skill_crafting;
-            case SMITHING: return R.drawable.ic_skill_smithing;
-            case COOKING: return R.drawable.ic_skill_cooking;
-            case ALCHEMY: return R.drawable.ic_skill_alchemy;
-            case TAILORING: return R.drawable.ic_skill_tailoring;
-            case CARPENTRY: return R.drawable.ic_skill_carpentry;
-            case ENCHANTING: return R.drawable.ic_skill_enchanting;
-            case COMMUNITY: return R.drawable.ic_skill_community;
-            case HARVESTING: return R.drawable.ic_skill_harvesting;
+            case MINING:      return R.drawable.ic_skill_mining;
+            case FISHING:     return R.drawable.ic_skill_fishing;
+            case GATHERING:   return R.drawable.ic_skill_gathering;
+            case HUNTING:     return R.drawable.ic_skill_hunting;
+            case CRAFTING:    return R.drawable.ic_skill_crafting;
+            case SMITHING:    return R.drawable.ic_skill_smithing;
+            case COOKING:     return R.drawable.ic_skill_cooking;
+            case ALCHEMY:     return R.drawable.ic_skill_alchemy;
+            case TAILORING:   return R.drawable.ic_skill_tailoring;
+            case CARPENTRY:   return R.drawable.ic_skill_carpentry;
+            case ENCHANTING:  return R.drawable.ic_skill_enchanting;
+            case COMMUNITY:   return R.drawable.ic_skill_community;
+            case HARVESTING:  return R.drawable.ic_skill_harvesting;
+
             default: return R.drawable.ic_skill_generic;
         }
     }
@@ -172,7 +172,7 @@ public class SkillsOverviewDialog extends DialogFragment {
             h.name.setText(r.name);
             h.level.setText(String.format(Locale.US, "Lv %d", r.level));
 
-            // Progress bar + text
+            // Progress bar + text uses "xp into level / xp for next level"
             int req = Math.max(1, r.req);
             int cur = Math.max(0, Math.min(r.cur, req));
             h.bar.setMax(req);

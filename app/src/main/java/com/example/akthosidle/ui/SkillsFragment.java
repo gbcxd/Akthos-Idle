@@ -16,14 +16,12 @@ import com.example.akthosidle.R;
 import com.example.akthosidle.data.repo.GameRepository;
 import com.example.akthosidle.databinding.FragmentSkillsBinding;
 import com.example.akthosidle.domain.model.PlayerCharacter;
-import com.example.akthosidle.domain.model.Skill;
 import com.example.akthosidle.domain.model.SkillId;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 public class SkillsFragment extends Fragment {
 
@@ -43,7 +41,7 @@ public class SkillsFragment extends Fragment {
     public void onViewCreated(@NonNull View v, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(v, savedInstanceState);
 
-        // Use the shared repo from MainActivity so state (like gathering) is consistent app-wide.
+        // Shared repo so state (like gathering) is consistent app-wide.
         repo = ((MainActivity) requireActivity()).getRepo();
         repo.loadDefinitions();
         PlayerCharacter pc = repo.loadOrCreatePlayer();
@@ -61,10 +59,9 @@ public class SkillsFragment extends Fragment {
         });
         b.recycler.setAdapter(adapter);
 
-        // Keep the XP/h FAB visibility in sync with gathering state while we're on this screen
-        repo.gatheringLive.observe(getViewLifecycleOwner(), isOn -> {
-            ((MainActivity) requireActivity()).setGatheringActive(Boolean.TRUE.equals(isOn));
-        });
+        // Keep the FAB visibility in sync with gathering state while we're on this screen
+        repo.gatheringLive.observe(getViewLifecycleOwner(), isOn ->
+                ((MainActivity) requireActivity()).setGatheringActive(Boolean.TRUE.equals(isOn)));
     }
 
     @Override
@@ -77,11 +74,9 @@ public class SkillsFragment extends Fragment {
     @Override
     public void onPause() {
         super.onPause();
-        // When leaving the Skills tab, tell the activity to hide the FAB unless gathering is still on
+        // Hide FAB when leaving this tab (Activity will re-enable if needed)
         ((MainActivity) requireActivity()).setGatheringActive(false);
     }
-
-    // --- stubs you can call from Skill Detail or any UI element in this fragment ---
 
     /** Call this when the player starts a gathering loop for a given skill. */
     private void onGatheringStarted(@Nullable SkillId skill) {
@@ -96,20 +91,33 @@ public class SkillsFragment extends Fragment {
     }
 
     // ------------------------------------------------------------------------------
-
+    // Build list rows from XP-based skills (no more Map<SkillId, Skill>).
+    // ------------------------------------------------------------------------------
     private List<SkillAdapter.SkillRow> buildRows(PlayerCharacter pc) {
-        Map<SkillId, Skill> map = (pc.skills != null) ? pc.skills : new EnumMap<>(SkillId.class);
-        List<SkillAdapter.SkillRow> out = new ArrayList<>();
+        // Keep a reference so we don't NPE if skills is null
+        EnumMap<SkillId, Integer> map = (pc.skills != null) ? pc.skills : new EnumMap<>(SkillId.class);
 
+        List<SkillAdapter.SkillRow> out = new ArrayList<>();
         for (SkillId id : SkillId.values()) {
-            // Skip combat skills in the skilling menu
+            // Skip combat skills in this skilling menu
             if (isCombat(id)) continue;
 
-            Skill s = map.get(id);
-            int lvl = (s != null) ? s.level : 1;
-            String name = prettify(id.name());
-            int icon = iconFor(id);
-            out.add(new SkillAdapter.SkillRow(id.name(), name, lvl, icon));
+            int xp    = pc.getSkillExp(id);
+            int level = pc.getSkillLevel(id);
+            int into  = PlayerCharacter.xpIntoLevel(xp, level);
+            int need  = PlayerCharacter.xpForNextLevel(level);
+
+            String title = prettify(id.name()); // Adapter can show "(Lv X)" itself; or include here.
+
+            // ---- If your SkillRow constructor differs, adjust the next line only. ----
+            out.add(new SkillAdapter.SkillRow(
+                    id.name(),         // id (String) used for navigation
+                    title,             // display title
+                    iconFor(id),       // icon resource
+                    level,             // level
+                    into,              // progress (xp into level)
+                    need               // progress max (xp needed for next)
+            ));
         }
         return out;
     }

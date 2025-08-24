@@ -20,13 +20,33 @@ public class SkillAdapter extends RecyclerView.Adapter<SkillAdapter.VH> {
     }
 
     public static class SkillRow {
-        public final String id;    // SkillId enum name string (e.g., "ATTACK")
-        public final String name;  // Display name
-        public final int level;    // Current level
-        public final int iconRes;  // Drawable res id
+        public final String id;      // SkillId enum name string (e.g., "ATTACK")
+        public final String name;    // Display name
+        public final int level;      // Current level
+        public final int iconRes;    // Drawable res id
 
+        // Optional progress (XP into current level / needed for next)
+        public final int progress;      // e.g., 120
+        public final int progressMax;   // e.g., 200
+
+        /** Original 4-arg constructor (backwards compatible). */
         public SkillRow(String id, String name, int level, int iconRes) {
-            this.id = id; this.name = name; this.level = level; this.iconRes = iconRes;
+            this.id = id;
+            this.name = name;
+            this.level = level;
+            this.iconRes = iconRes;
+            this.progress = 0;
+            this.progressMax = 0;
+        }
+
+        /** New 6-arg constructor used by SkillsFragment (id, name, iconRes, level, into, need). */
+        public SkillRow(String id, String name, int iconRes, int level, int progress, int progressMax) {
+            this.id = id;
+            this.name = name;
+            this.level = level;
+            this.iconRes = iconRes;
+            this.progress = progress;
+            this.progressMax = progressMax;
         }
     }
 
