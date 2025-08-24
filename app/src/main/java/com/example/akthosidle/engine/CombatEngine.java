@@ -12,6 +12,7 @@ import com.example.akthosidle.domain.model.Drop;
 import com.example.akthosidle.domain.model.Item;
 import com.example.akthosidle.domain.model.Monster;
 import com.example.akthosidle.domain.model.PlayerCharacter;
+import com.example.akthosidle.domain.model.SkillId;   // ← import SkillId
 import com.example.akthosidle.domain.model.Stats;
 
 import java.util.ArrayList;
@@ -183,17 +184,8 @@ public class CombatEngine {
             s.monsterHp = Math.max(0, s.monsterHp - res.dmg);
             logLine("You hit " + s.monsterName + " for " + res.dmg + (res.crit ? " (CRIT!)" : ""));
 
-            // Example: track a bit of Attack XP per swing (optional, keep if you like)
-            repo.addSkillExp(com.example.akthosidle.domain.model.SkillId.ATTACK, 1);
-
-            // 🔥 Try to apply/refresh Burn on monster
-            if (rng.nextDouble() < BURN_APPLY_CHANCE) {
-                int before = burnStacks;
-                if (burnStacks < BURN_MAX_STACKS) burnStacks++;
-                burnRemainSec = BURN_DURATION_SEC; // refresh duration
-                logLine("Burn " + (burnStacks > before ? "applied" : "refreshed")
-                        + " (" + burnStacks + " stacks, " + (int)Math.ceil(burnRemainSec) + "s)");
-            }
+            // ❌ Removed per-swing skill XP (was giving 1 XP per second)
+            // repo.addSkillExp(SkillId.ATTACK, 1);
         }
 
         // 🔥 Burn ticking (on monster) — occurs after hits, before victory check
@@ -224,15 +216,15 @@ public class CombatEngine {
             s.playerHp = Math.max(0, s.playerHp - res.dmg);
             logLine(s.monsterName + " hits you for " + res.dmg + (res.crit ? " (CRIT!)" : ""));
 
-            // Example: track a bit of Defense XP per enemy hit (optional)
-            repo.addSkillExp(com.example.akthosidle.domain.model.SkillId.DEFENSE, 1);
+            // ❌ Removed per-hit Defense trickle XP
+            // repo.addSkillExp(SkillId.DEFENSE, 1);
         }
 
         // defeat/victory
         if (s.monsterHp == 0 || s.playerHp == 0) {
             s.running = false;
             if (s.monsterHp == 0) {
-                grantRewards(pc, monster);
+                grantRewards(pc, monster); // ✅ All XP goes to selected training skill here
                 logLine("You defeated " + s.monsterName + "!");
             } else {
                 logLine("You were defeated by " + s.monsterName + "...");
@@ -285,18 +277,23 @@ public class CombatEngine {
     private void grantRewards(PlayerCharacter pc, Monster m) {
         if (pc == null || m == null) return;
 
-        // ✅ XP via repo (toast + XP/h tracker)
-        if (m.expReward > 0) {
-            repo.addPlayerExp(m.expReward);
+        // === XP → selected training skill ===
+        int xp = (m.getExpPerKill());           // Uses Monster.exp or legacy expReward
+        if (xp > 0) {
+            SkillId train = repo.getCombatTrainingSkill();
+            if (train == null) train = SkillId.ATTACK; // sensible default
+            repo.addSkillExp(train, xp);               // <- the actual XP grant
+            // Optional: also show a generic XP toast (comment out if you don’t want it)
+            // repo.addPlayerExp(xp);
         }
 
-        // ✅ Currency: treat as SILVER (pending; shows in toolbar after collect)
-        // If your Monster has a dedicated silver field later, swap to it.
+        // === Currency / drops ===
+        // Silver (allowed). No gold here per your rule.
         if (m.silverReward > 0) {
             repo.addPendingCurrency("silver", "Silver", m.silverReward);
         }
 
-        // --- Item DROPS ---
+        // Item DROPS
         List<Drop> drops = m.drops;
         if (drops != null) {
             for (Drop d : drops) {
@@ -312,6 +309,9 @@ public class CombatEngine {
             }
         }
 
+        // Slayer points are **not** granted here unless you wire an active-task check:
+        // if (slayerTaskManager.isActiveFor(monster.id) && m.slayerReward > 0) { ... }
+
         repo.save();
     }
 
@@ -321,18 +321,12 @@ public class CombatEngine {
         return v;
     }
 
-    private int reqExp(int lvl) { return 50 + (lvl * 25); }
-
     // ----- tiny log helpers -----
-    private void logClear() {
-        logLive.postValue(new ArrayList<>());
-    }
+    private void logClear() { logLive.postValue(new ArrayList<>()); }
     private void logLine(String msg) {
         List<String> cur = logLive.getValue();
         if (cur == null) cur = new ArrayList<>();
-        // prepend newest
         cur.add(0, msg);
-        // cap to 50 lines
         if (cur.size() > 50) cur = new ArrayList<>(cur.subList(0, 50));
         logLive.postValue(cur);
         if (debugToasts) repo.toast(msg);

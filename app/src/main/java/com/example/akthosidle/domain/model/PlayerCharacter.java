@@ -24,8 +24,8 @@ public class PlayerCharacter {
 
     // --- config ---
     private static final int MAX_LEVEL = 99;
-    private static final double XP_BASE = 50.0;
-    private static final double XP_GROWTH = 1.15;
+    private static final double XP_BASE = 100.0;
+    private static final double XP_GROWTH = 1.3;
     private static final int HP_PER_LEVEL = 10; // +10 Max HP per HP level over 1
 
     // ===== Quick food =====

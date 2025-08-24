@@ -3,6 +3,7 @@ package com.example.akthosidle.ui;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -22,7 +23,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.akthosidle.R;
 import com.example.akthosidle.data.dtos.InventoryItem;
 import com.example.akthosidle.domain.model.Item;
+import com.example.akthosidle.domain.model.Monster;
 import com.example.akthosidle.domain.model.PlayerCharacter;
+import com.example.akthosidle.domain.model.SkillId;
 import com.example.akthosidle.engine.CombatEngine;
 
 import java.util.ArrayList;
@@ -38,6 +41,7 @@ public class BattleFragment extends Fragment {
     private ProgressBar barEnemy, barPlayer;
     private TextView tvEnemyPct, tvPlayerPct, tvEnemy, tvStatsRow, tvNoLoot;
     private Button btnFight, btnCollect, btnQuickHeal;
+    private Button btnTrainSkill; // NEW: pick training skill
     private ImageView imgMonster;
     private LootAdapter lootAdapter;
     private LogAdapter logAdapter;
@@ -75,6 +79,9 @@ public class BattleFragment extends Fragment {
         btnCollect   = v.findViewById(R.id.btnCollect);
         tvNoLoot     = v.findViewById(R.id.tvNoLoot);
 
+        // NEW
+        btnTrainSkill = v.findViewById(R.id.btnTrainSkill);
+
         // Loot list
         RecyclerView rvLoot = v.findViewById(R.id.rvLoot);
         rvLoot.setLayoutManager(new LinearLayoutManager(requireContext()));
@@ -87,8 +94,9 @@ public class BattleFragment extends Fragment {
         logAdapter = new LogAdapter();
         rvLog.setAdapter(logAdapter);
 
-        // Example enemy label (replace when you wire a selector)
-        tvEnemy.setText("Shadow Thief (Lvl 1)");
+        // Enemy label (fallback text if monster not found)
+        Monster m = vm.repo.getMonster(MONSTER_ID);
+        tvEnemy.setText(m != null && m.name != null ? m.name : "Shadow Thief");
 
         // Fight/Stop with infinite loop while keepFighting == true
         btnFight.setOnClickListener(_v -> {
@@ -114,6 +122,12 @@ public class BattleFragment extends Fragment {
 
         // Quick Heal button: tap = heal; 2s long-press = select consumable
         setupQuickHealButton();
+
+        // NEW: training-skill picker
+        if (btnTrainSkill != null) {
+            refreshTrainSkillLabel();
+            btnTrainSkill.setOnClickListener(__ -> showTrainSkillPicker());
+        }
 
         // Observe combat state
         vm.battleState().observe(getViewLifecycleOwner(), this::renderState);
@@ -227,27 +241,69 @@ public class BattleFragment extends Fragment {
                 : ("Heal: " + name + " (0)"));
     }
 
+    // === NEW: training-skill UI ===
+
+    private void refreshTrainSkillLabel() {
+        if (btnTrainSkill == null) return;
+        SkillId s = vm.repo.getCombatTrainingSkill();
+        String pretty = (s == null) ? "Attack" : capitalize(s.name());
+        btnTrainSkill.setText("Train: " + pretty);
+    }
+
+    private void showTrainSkillPicker() {
+        final SkillId[] choices = new SkillId[] {
+                SkillId.ATTACK, SkillId.STRENGTH, SkillId.DEFENSE,
+                SkillId.ARCHERY, SkillId.MAGIC, SkillId.HP
+        };
+        String[] labels = new String[] { "Attack", "Strength", "Defense", "Archery", "Magic", "HP" };
+
+        SkillId current = vm.repo.getCombatTrainingSkill();
+        int checked = 0;
+        for (int i = 0; i < choices.length; i++) {
+            if (choices[i] == current) { checked = i; break; }
+        }
+
+        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("Train which skill?")
+                .setSingleChoiceItems(labels, checked, (d, which) -> {
+                    SkillId pick = choices[which];
+                    vm.repo.setCombatTrainingSkill(pick);
+                    refreshTrainSkillLabel();
+                    vm.repo.toast("Training: " + labels[which]);
+                    d.dismiss();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private static String capitalize(String s) {
+        if (s == null || s.isEmpty()) return s;
+        return s.substring(0,1).toUpperCase(Locale.US) + s.substring(1).toLowerCase(Locale.US);
+    }
+
+    // === end training-skill UI ===
+
     private void renderState(CombatEngine.BattleState s) {
         if (s == null) return;
 
-        int eMax = Math.max(1, vm.repo.getMonster(s.monsterId).stats.health);
-        int ePct = (int) Math.round(100.0 * s.monsterHp / (double) eMax);
+        // Enemy bar
+        Monster m = s.monsterId != null ? vm.repo.getMonster(s.monsterId) : null;
+        int eMax = Math.max(1, (m != null && m.stats != null) ? m.stats.health : 1);
+        int ePct = (int) Math.round(100.0 * Math.max(0, Math.min(s.monsterHp, eMax)) / (double) eMax);
         barEnemy.setProgress(ePct);
         tvEnemyPct.setText(ePct + "%");
 
+        // Player bar
         renderPlayerHp(s.playerHp);
 
         // Button label reflects running state
         btnFight.setText(s.running ? "Stop" : "Fight");
 
-        // Infinite loop logic:
-        // If the fight just ended and the user wants to keep fighting, restart on victory.
+        // Auto-loop logic
         if (!s.running && keepFighting) {
             if (s.monsterHp == 0) {
-                // Victory → immediately respawn/start same monster
                 vm.startFight(s.monsterId != null ? s.monsterId : MONSTER_ID);
             } else if (s.playerHp == 0) {
-                // On death, stop the loop (so we don't soft-lock with 0 HP)
                 keepFighting = false;
                 btnFight.setText("Fight");
                 vm.repo.toast("You died — auto-loop stopped");

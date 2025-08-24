@@ -12,7 +12,6 @@ import androidx.annotation.WorkerThread;
 
 import com.example.akthosidle.data.repo.GameRepository;
 import com.example.akthosidle.domain.model.Action;
-import com.example.akthosidle.domain.model.PlayerCharacter;
 import com.example.akthosidle.domain.model.SkillId;
 
 import java.util.Locale;
@@ -21,8 +20,8 @@ import java.util.Map;
 /**
  * Runs a chosen non-combat Action in a loop and reports progress back to the UI.
  * - Directly grants outputs (no pending buffer).
- * - Adds Skill XP via GameRepository.
- * - One toast per completion (suppressed during offline catch-up).
+ * - Adds Skill XP via GameRepository using Action.exp.
+ * - Toasts are rate-limited to avoid "already queued 5 toasts" errors.
  */
 public class ActionEngine {
 
@@ -45,7 +44,13 @@ public class ActionEngine {
     private static final String KEY_RUN_ACTION_ID = "run_action_id";
     private static final String KEY_RUN_STARTED_AT = "run_started_at";
     private static final String KEY_RUN_SKILL = "run_skill";
+
+    // Cap offline catch-up to 2h
     private static final long MAX_OFFLINE_MS = 2L * 60L * 60L * 1000L;
+
+    // Avoid toast spam: at most 1 toast every 1200ms.
+    private static final long MIN_TOAST_INTERVAL_MS = 1200L;
+    private long lastToastAt = 0L;
 
     private final SharedPreferences engineSp;
 
@@ -56,12 +61,10 @@ public class ActionEngine {
     }
 
     public void setListener(@Nullable Listener l) { this.listener = l; }
-
-    /** NEW: expose current running state */
     public boolean isRunning() { return running; }
 
-    /** NEW: get persisted running skill if any (used after restore) */
-    @Nullable public SkillId getPersistedRunningSkill() {
+    @Nullable
+    public SkillId getPersistedRunningSkill() {
         String s = engineSp.getString(KEY_RUN_SKILL, null);
         if (s == null) return null;
         try { return SkillId.valueOf(s); } catch (IllegalArgumentException e) { return null; }
@@ -126,7 +129,7 @@ public class ActionEngine {
 
         long cycles = cappedElapsed / duration;
         for (long i = 0; running && i < cycles; i++) {
-            boolean leveled = grantRewardsAndXp(a, false);
+            boolean leveled = grantRewardsAndXp(a, false); // no toasts during catch-up
             postCompleted(a, leveled);
         }
 
@@ -152,7 +155,7 @@ public class ActionEngine {
 
             if (!running) break;
 
-            boolean leveled = grantRewardsAndXp(a, true);
+            boolean leveled = grantRewardsAndXp(a, true); // real-time cycle: allow toast (rate-limited)
             postCompleted(a, leveled);
 
             start = SystemClock.uptimeMillis();
@@ -161,16 +164,17 @@ public class ActionEngine {
     }
 
     @WorkerThread
-    private boolean grantRewardsAndXp(Action a, boolean showToast) {
+    private boolean grantRewardsAndXp(Action a, boolean allowToast) {
         StringBuilder toastMsg = new StringBuilder();
 
+        // Direct outputs (items or currency:xxx)
         if (a.outputs != null && !a.outputs.isEmpty()) {
             boolean first = true;
             for (Map.Entry<String, Integer> e : a.outputs.entrySet()) {
                 String idOrCurrency = e.getKey();
                 int qty = Math.max(1, e.getValue());
 
-                repo.grantGathered(idOrCurrency, qty, null); // direct save
+                repo.grantGathered(idOrCurrency, qty, null); // saves & publishes
 
                 String pretty;
                 if (idOrCurrency != null && idOrCurrency.startsWith("currency:")) {
@@ -186,18 +190,24 @@ public class ActionEngine {
             }
         }
 
+        // Skill XP (use Action.exp, fallback to 5)
         int xp = (a.exp > 0) ? a.exp : 5;
         boolean leveledUp = false;
         if (a.skill != null && xp > 0) {
             leveledUp = repo.addSkillExp(a.skill, xp);
         }
 
-        if (showToast) {
+        // Optional: also add player XP (commented out)
+        // repo.addPlayerExp(xp);
+
+        // Rate-limited toast to avoid system drops
+        if (allowToast) {
             final String msg = (toastMsg.length() > 0)
                     ? (toastMsg + " (+" + xp + " XP)")
                     : ("+" + xp + " XP");
-            main.post(() -> repo.toast(msg));
+            maybeToast(msg);
         }
+
         return leveledUp;
     }
 
@@ -222,15 +232,26 @@ public class ActionEngine {
         if (l == null) return;
         main.post(() -> l.onTick(a, percent, elapsed, remaining));
     }
+
     private void postCompleted(Action a, boolean leveled) {
         Listener l = listener;
         if (l == null) return;
         main.post(() -> l.onActionComplete(a, leveled));
     }
+
     private void postLoopState(boolean state) {
         Listener l = listener;
         if (l == null) return;
         main.post(() -> l.onLoopStateChanged(state));
+    }
+
+    /** Only show a toast if enough time passed since the last one. */
+    private void maybeToast(String message) {
+        long now = SystemClock.uptimeMillis();
+        if (now - lastToastAt >= MIN_TOAST_INTERVAL_MS) {
+            lastToastAt = now;
+            main.post(() -> repo.toast(message));
+        }
     }
 
     private static String capitalize(String s) {

@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
@@ -34,15 +35,14 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Comparator;
-import java.util.Collections;
-
 
 public class GameRepository {
 
     private static final String SP_NAME = "akthos_idle_save";
     private static final String KEY_PLAYER = "player_json";
     private static final String KEY_LAST_SEEN = "last_seen_ms";
+    // NEW: persisted “which combat skill should get kill XP”
+    private static final String KEY_TRAIN_SKILL = "combat_training_skill";
 
     private static final String ASSET_ITEMS    = "game/items.v1.json";
     private static final String ASSET_ACTIONS  = "game/actions.v1.json";
@@ -77,6 +77,23 @@ public class GameRepository {
 
     // Battle state (authoritative flag for FAB visibility, etc.)
     public final MutableLiveData<Boolean> battleLive = new MutableLiveData<>(false);
+
+    // --- Toast throttling + coalescing (prevents "queued 5 toasts" errors) ---
+    private static final long TOAST_MIN_INTERVAL_MS = 1200L;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    @Nullable private Toast currentToast = null;
+    private long nextAllowedToastAt = 0L;
+    @Nullable private String deferredToastMsg = null;
+    private int deferredToastCount = 0;
+    private final Runnable toastDrain = new Runnable() {
+        @Override public void run() {
+            String msg = deferredToastMsg;
+            int count = deferredToastCount;
+            deferredToastMsg = null;
+            deferredToastCount = 0;
+            if (msg != null) showToastNow(msg + (count > 1 ? " ×" + count : ""));
+        }
+    };
 
     public GameRepository(Context appContext) {
         this.app = appContext.getApplicationContext();
@@ -207,43 +224,106 @@ public class GameRepository {
     /* ============================
      * Player Save / Load
      * ============================ */
+
+    private static int xpAtStartOfLevel(int lvl) {
+        // Minimal XP to *be at* level `lvl`. Level 1 => 0 XP.
+        int x = 0;
+        int L = Math.max(1, lvl);
+        for (int i = 1; i < L; i++) {
+            x += PlayerCharacter.xpForNextLevel(i);
+        }
+        return x;
+    }
+
     public PlayerCharacter loadOrCreatePlayer() {
         if (player != null) return player;
 
         String json = sp.getString(KEY_PLAYER, null);
         if (json != null) {
-            Type t = new TypeToken<PlayerCharacter>() {}.getType();
-            player = gson.fromJson(json, t);
+            // First try normal parse (new format where skills map to ints)
+            try {
+                Type t = new TypeToken<PlayerCharacter>() {}.getType();
+                player = gson.fromJson(json, t);
+            } catch (Exception parseFail) {
+                // Fallback: legacy migration – skills were objects not ints
+                try {
+                    JSONObject root = new JSONObject(json);
+                    JSONObject skills = root.optJSONObject("skills");
+                    if (skills != null) {
+                        JSONArray names = skills.names();
+                        if (names != null) {
+                            for (int i = 0; i < names.length(); i++) {
+                                String key = names.optString(i, null);
+                                if (key == null) continue;
 
-            if (player.bag == null) player.bag = new HashMap<>();
-            if (player.equipment == null) player.equipment = new EnumMap<>(EquipmentSlot.class);
-            if (player.skills == null) player.skills = new EnumMap<>(SkillId.class);
-            if (player.currencies == null) player.currencies = new HashMap<>();
-            if (player.base == null) player.base = new Stats(12, 6, 0.0, 100, 0.05, 1.5);
-
-            // migrate legacy skill storage to XP if needed
-            player.migrateSkillsToXpIfNeeded();
-
-            if (player.base.health <= 0) player.base.health = 100;
-            if (player.base.critMultiplier < 1.0) player.base.critMultiplier = 1.5;
-            if (player.base.critChance < 0) player.base.critChance = 0;
-            if (player.base.critChance > 1) player.base.critChance = 1;
-
-            player.normalizeCurrencies();
-
-            int maxHp = totalStats().health;
-            if (maxHp <= 0) maxHp = 100;
-            if (player.currentHp == null || player.currentHp <= 0 || player.currentHp > maxHp) {
-                player.currentHp = maxHp;
-                save();
+                                Object val = skills.opt(key);
+                                if (val instanceof JSONObject) {
+                                    JSONObject sobj = (JSONObject) val;
+                                    // Prefer explicit xp/exp if present; otherwise derive from level
+                                    int xp = sobj.has("xp") ? sobj.optInt("xp",
+                                            sobj.optInt("exp", 0))
+                                            : sobj.optInt("exp", 0);
+                                    if (xp <= 0) {
+                                        int lvl = Math.max(1,
+                                                sobj.optInt("level",
+                                                        sobj.optInt("lvl", 1)));
+                                        xp = xpAtStartOfLevel(lvl);
+                                    }
+                                    skills.put(key, xp);
+                                } else if (val == JSONObject.NULL) {
+                                    skills.put(key, 0);
+                                } else if (val instanceof String) {
+                                    try {
+                                        skills.put(key, Integer.parseInt((String) val));
+                                    } catch (NumberFormatException ignored) {
+                                        skills.put(key, 0);
+                                    }
+                                }
+                                // if already a number, leave it
+                            }
+                        }
+                    }
+                    // Re-parse using migrated JSON
+                    Type t = new TypeToken<PlayerCharacter>() {}.getType();
+                    player = gson.fromJson(root.toString(), t);
+                } catch (Exception migrateFail) {
+                    // Couldn’t migrate; fall through to create a fresh player
+                    player = null;
+                }
             }
 
-            publishCurrencies();
-            publishHp();
-            return player;
+            if (player != null) {
+                if (player.bag == null) player.bag = new HashMap<>();
+                if (player.equipment == null) player.equipment = new EnumMap<>(EquipmentSlot.class);
+                if (player.skills == null) player.skills = new EnumMap<>(SkillId.class);
+                if (player.currencies == null) player.currencies = new HashMap<>();
+                if (player.base == null) player.base = new Stats(12, 6, 0.0, 100, 0.05, 1.5);
+
+                // migrate any other legacy bits now that we can access the object
+                player.migrateSkillsToXpIfNeeded();
+
+                if (player.base.health <= 0) player.base.health = 100;
+                if (player.base.critMultiplier < 1.0) player.base.critMultiplier = 1.5;
+                if (player.base.critChance < 0) player.base.critChance = 0;
+                if (player.base.critChance > 1) player.base.critChance = 1;
+
+                player.normalizeCurrencies();
+
+                int maxHp = totalStats().health;
+                if (maxHp <= 0) maxHp = 100;
+                if (player.currentHp == null || player.currentHp <= 0 || player.currentHp > maxHp) {
+                    player.currentHp = maxHp;
+                    save();
+                }
+
+                publishCurrencies();
+                publishHp();
+                return player;
+            }
+            // If we get here, parsing/migration failed and we'll create a fresh save below.
         }
 
-        // new player
+        // ---- new player seed path (unchanged) ----
         player = new PlayerCharacter();
         player.normalizeCurrencies();
 
@@ -343,12 +423,50 @@ public class GameRepository {
     }
 
     /* ============================
+     * Combat training skill (persisted choice)
+     * ============================ */
+    public @Nullable SkillId getCombatTrainingSkill() {
+        String s = sp.getString(KEY_TRAIN_SKILL, null);
+        if (s != null) {
+            try {
+                SkillId id = SkillId.valueOf(s);
+                if (isCombatSkillEnum(id)) return id;
+            } catch (Exception ignored) {}
+        }
+        // Default choice if not set
+        return SkillId.ATTACK;
+    }
+
+    public void setCombatTrainingSkill(@Nullable SkillId id) {
+        if (id == null) {
+            sp.edit().remove(KEY_TRAIN_SKILL).apply();
+            return;
+        }
+        if (!isCombatSkillEnum(id)) return;
+        sp.edit().putString(KEY_TRAIN_SKILL, id.name()).apply();
+    }
+
+    private boolean isCombatSkillEnum(@Nullable SkillId id) {
+        if (id == null) return false;
+        switch (id) {
+            case ATTACK:
+            case STRENGTH:
+            case DEFENSE:
+            case ARCHERY:
+            case MAGIC:
+            case HP:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /* ============================
      * XP helpers
      * ============================ */
     public void addPlayerExp(int amount) {
         if (amount <= 0) return;
-        PlayerCharacter pc = loadOrCreatePlayer();
-        pc.exp += amount;
+        // No persistent "player.exp" field—just track & toast.
         save();
         toast("+" + amount + " XP");
         xpTracker.note("combat", amount);
@@ -727,7 +845,7 @@ public class GameRepository {
 
         Item def = getItem(itemId);
         String name = def != null && def.name != null ? def.name : itemId;
-        toast("+" + qty + "× " + name);
+        // (intentionally no per-item toast here; ActionEngine aggregates a toast)
     }
 
     /** Give a gathered CURRENCY straight to balances and toast it. */
@@ -1005,16 +1123,40 @@ public class GameRepository {
     }
 
     /* ============================
-     * Toast Helper (main-thread safe)
+     * Toast Helper (throttled, main-thread safe)
      * ============================ */
     public void toast(String msg) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            Toast.makeText(app, msg, Toast.LENGTH_SHORT).show();
+            throttleToast(msg);
         } else {
-            new Handler(Looper.getMainLooper()).post(
-                    () -> Toast.makeText(app, msg, Toast.LENGTH_SHORT).show()
-            );
+            mainHandler.post(() -> throttleToast(msg));
         }
+    }
+
+    private void throttleToast(String msg) {
+        long now = SystemClock.uptimeMillis();
+        if (now >= nextAllowedToastAt) {
+            showToastNow(msg);
+            return;
+        }
+        // coalesce duplicates during cooldown
+        if (deferredToastMsg != null && deferredToastMsg.equals(msg)) {
+            deferredToastCount++;
+        } else {
+            deferredToastMsg = msg;
+            deferredToastCount = 1;
+        }
+        mainHandler.removeCallbacks(toastDrain);
+        mainHandler.postAtTime(toastDrain, nextAllowedToastAt);
+    }
+
+    private void showToastNow(String msg) {
+        try {
+            if (currentToast != null) currentToast.cancel();
+            currentToast = Toast.makeText(app, msg, Toast.LENGTH_SHORT);
+            currentToast.show();
+            nextAllowedToastAt = SystemClock.uptimeMillis() + TOAST_MIN_INTERVAL_MS;
+        } catch (Throwable ignored) { }
     }
 
     /* ============================

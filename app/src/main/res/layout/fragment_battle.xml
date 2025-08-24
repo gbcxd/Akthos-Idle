@@ -92,6 +92,16 @@
                 android:text="Heal" />
 
             <Button
+                android:id="@+id/btnTrainSkill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+
+                android:text="Train: Attack"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/tvStatsRow" />
+
+            <Button
                 android:id="@+id/btnFight"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
