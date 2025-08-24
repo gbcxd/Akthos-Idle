@@ -23,4 +23,8 @@
 
     <string name="open_shop">Open Shop</string>
     <string name="open_shop_summary">Buy gear, potions, and supplies</string>
+
+    <string name="running">Running</string>
+    <string name="level_up_short">Level up!</string>
+    <string name="completed_fmt">Completed: %1$s</string>
 </resources>

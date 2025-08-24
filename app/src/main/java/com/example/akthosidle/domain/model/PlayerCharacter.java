@@ -1,171 +1,199 @@
 package com.example.akthosidle.domain.model;
 
+import androidx.annotation.Nullable;
+
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Player save model: stats, skills, equipment, inventory, and quick selections. */
 public class PlayerCharacter {
+    // --- persisted fields ---
+    public Map<String, Integer> bag = new HashMap<>();
+    public EnumMap<EquipmentSlot, String> equipment = new EnumMap<>(EquipmentSlot.class);
 
-    // ---- Identity & progression ----
-    public String name = "Hero";
-    public int level = 1;
+    /** Stores XP per skill (not level). Old saves with small numbers will be migrated. */
+    public EnumMap<SkillId, Integer> skills = new EnumMap<>(SkillId.class);
+
+    /** Overall player XP (used by GameRepository.addPlayerExp). */
     public int exp = 0;
 
-    // ---- Currency (legacy + new) ----
-    /** Legacy main currency (kept for compatibility). */
-    public long gold = 0;
-
-    /** New: flexible currency balances (e.g., silver, gold, slayer, etc.) */
-    public Map<String, Long> currencies = new HashMap<>(); // id -> balance
-
-    // ---- Base stats (augmented by gear & buffs) ----
-    /**
-     * attack, defense, speed(0..1), health, critChance(0..1), critMultiplier(>=1.0)
-     * Defaults are intentionally modest so early combat is balanced.
-     */
-    public Stats base = new Stats(
-            /*attack*/        12,
-            /*defense*/        6,
-            /*speed*/        0.00,
-            /*health*/        100,
-            /*critChance*/   0.05,
-            /*critMultiplier*/1.50
-    );
-
-    // ---- Health (persisted) ----
-    /** Initialized on first load to max HP (computed using base + gear). */
+    public Map<String, Long> currencies = new HashMap<>();
+    public Stats base = new Stats(12, 6, 0.0, 100, 0.05, 1.5);
     public Integer currentHp;
-
-    // ---- Equipment & inventory ----
-    /** Equipped item IDs by slot. */
-    public Map<EquipmentSlot, String> equipment = new EnumMap<>(EquipmentSlot.class);
-    /** Inventory: itemId -> quantity. */
-    public Map<String, Integer> bag = new HashMap<>();
-
-    // ---- Skills ----
-    /** Initialized lazily via {@link #skill(SkillId)} if empty. */
-    public Map<SkillId, Skill> skills = new EnumMap<>(SkillId.class);
-
-    // ---- Quick selections ----
     private String quickFoodId;
 
-    public PlayerCharacter() {}
+    // --- config ---
+    private static final int MAX_LEVEL = 99;
+    private static final double XP_BASE = 50.0;
+    private static final double XP_GROWTH = 1.15;
+    private static final int HP_PER_LEVEL = 10; // +10 Max HP per HP level over 1
 
-    // ---------- Computed helpers ----------
+    // ===== Quick food =====
+    public @Nullable String getQuickFoodId() { return quickFoodId; }
+    public void setQuickFoodId(@Nullable String id) { quickFoodId = id; }
 
-    /**
-     * Compute effective stats as (base + gear), with correct crit semantics:
-     * - attack/defense/speed/health: additive
-     * - critChance: additive then clamped to [0,1]
-     * - critMultiplier: take the maximum of base vs. gear
-     */
-    public Stats totalStats(Stats gearSum) {
-        if (gearSum == null) gearSum = new Stats();
-        Stats out = new Stats();
-        out.attack  = safeAdd(base.attack,  gearSum.attack);
-        out.defense = safeAdd(base.defense, gearSum.defense);
-        out.speed   = clamp01(base.speed + gearSum.speed);
-        out.health  = safeAdd(base.health,  gearSum.health);
-
-        // Crit chance adds up but stays within 0..1
-        out.critChance = clamp01(base.critChance + gearSum.critChance);
-
-        // Crit multiplier takes the strongest source
-        out.critMultiplier = Math.max(
-                base.critMultiplier > 0 ? base.critMultiplier : 1.0,
-                gearSum.critMultiplier > 0 ? gearSum.critMultiplier : 1.0
-        );
-        return out;
+    // ===== Currency helpers =====
+    public void normalizeCurrencies() {
+        if (!currencies.containsKey("gold"))   currencies.put("gold",   0L);
+        if (!currencies.containsKey("silver")) currencies.put("silver", 0L);
     }
-
-    // ---------- Inventory helpers ----------
-    public void addItem(String itemId, int qty) {
-        if (itemId == null || qty == 0) return;
-        int now = bag.getOrDefault(itemId, 0) + qty;
-        if (now <= 0) bag.remove(itemId); else bag.put(itemId, now);
-    }
-
-    // ---------- Currency helpers (new) ----------
-    /** Get balance for a currency id (e.g., "silver", "gold", "slayer"). */
-    public long getCurrency(String id) {
-        if (id == null) return 0L;
-        if ("gold".equals(id)) return Math.max(gold, currencies.getOrDefault("gold", 0L)); // legacy compat
-        return currencies.getOrDefault(id, 0L);
-    }
-
-    /** Add (or subtract) an amount to a currency (amount can be negative). */
-    public void addCurrency(String id, long amount) {
-        if (id == null || amount == 0) return;
-        if ("gold".equals(id)) {
-            gold = Math.max(0L, gold + amount); // keep legacy in sync
-            currencies.put("gold", gold);
-            return;
-        }
-        long cur = currencies.getOrDefault(id, 0L);
-        long next = cur + amount;
-        currencies.put(id, Math.max(0L, next));
-    }
-
-    /** Spend returns true if sufficient balance; does nothing and returns false otherwise. */
+    public long getCurrency(String id) { return currencies.getOrDefault(id, 0L); }
+    public void addCurrency(String id, long amount) { currencies.put(id, getCurrency(id) + amount); }
     public boolean spendCurrency(String id, long amount) {
-        if (id == null || amount <= 0) return true;
-        long cur = getCurrency(id);
-        if (cur < amount) return false;
-        addCurrency(id, -amount);
+        long have = getCurrency(id);
+        if (have < amount) return false;
+        currencies.put(id, have - amount);
         return true;
     }
 
-    /** One-time call after load to mirror legacy gold into the map. */
-    public void normalizeCurrencies() {
-        long mappedGold = currencies.getOrDefault("gold", 0L);
-        if (mappedGold != gold) {
-            currencies.put("gold", gold);
+    // ===== Inventory helpers =====
+    public void addItem(String id, int qty) {
+        if (id == null || qty == 0) return;
+        bag.put(id, bag.getOrDefault(id, 0) + qty);
+        if (bag.get(id) != null && bag.get(id) <= 0) bag.remove(id);
+    }
+
+    // ===== Skill XP system =====
+    /** Sum of per-level costs to reach 'level'. level=1 -> 0 XP. */
+    public static int xpToReachLevel(int level) {
+        if (level <= 1) return 0;
+        double sum = 0;
+        for (int l = 1; l < level; l++) {
+            sum += Math.floor(XP_BASE * Math.pow(XP_GROWTH, l - 1));
+        }
+        return (int) Math.floor(sum);
+    }
+
+    /** Given XP, returns the level (1..MAX_LEVEL). */
+    public static int levelForExp(int xp) {
+        int level = 1;
+        while (level < MAX_LEVEL && xp >= xpToReachLevel(level + 1)) level++;
+        return level;
+    }
+
+    /** XP needed inside the current level (progress numerator). */
+    public static int xpIntoLevel(int xp, int level) {
+        return Math.max(0, xp - xpToReachLevel(level));
+    }
+
+    /** XP size of the current level (progress denominator). */
+    public static int xpForNextLevel(int level) {
+        return xpToReachLevel(level + 1) - xpToReachLevel(level);
+    }
+
+    /** Returns raw XP stored for this skill. */
+    public int getSkillExp(SkillId id) {
+        return skills.getOrDefault(id, 0);
+    }
+
+    /** Returns computed level from XP. */
+    public int getSkillLevel(SkillId id) {
+        return levelForExp(getSkillExp(id));
+    }
+
+    /**
+     * Adds XP to a skill and returns true if at least 1 level was gained.
+     */
+    public boolean addSkillExp(SkillId id, int amount) {
+        if (id == null || amount <= 0) return false;
+        int oldXp = getSkillExp(id);
+        int oldLevel = levelForExp(oldXp);
+        int newXp = oldXp + amount;
+        skills.put(id, newXp);
+
+        int newLevel = levelForExp(newXp);
+        boolean leveled = newLevel > oldLevel;
+
+        // If HP skill leveled, clamping to new max happens in totalStats().
+        return leveled;
+    }
+
+    // ===== Optional: overall player level helpers (reuse same curve) =====
+    public int getPlayerLevel() { return levelForExp(exp); }
+    public int getPlayerXpIntoLevel() { return xpIntoLevel(exp, getPlayerLevel()); }
+    public int getPlayerXpForNextLevel() { return xpForNextLevel(getPlayerLevel()); }
+
+    // ===== Stats aggregation (include HP per HP level) =====
+    public Stats totalStats(Stats gear) {
+        Stats out = new Stats(
+                base.attack, base.defense, base.speed, base.health, base.critChance, base.critMultiplier
+        );
+        if (gear != null) {
+            out.attack += gear.attack;
+            out.defense += gear.defense;
+            out.speed += gear.speed;
+            out.health += gear.health;
+            out.critChance += gear.critChance;
+            out.critMultiplier = Math.max(out.critMultiplier, gear.critMultiplier);
+        }
+
+        // HP scales with the HP skill level.
+        int hpLevel = getSkillLevel(SkillId.HP);
+        if (hpLevel > 1) out.health += (hpLevel - 1) * HP_PER_LEVEL;
+
+        // Optional: map combat skills into stats
+        // out.attack  += Math.max(0, getSkillLevel(SkillId.ATTACK)  - 1);
+        // out.defense += Math.max(0, getSkillLevel(SkillId.DEFENSE) - 1);
+
+        // Clamp current HP to new max
+        int maxHp = Math.max(1, out.health);
+        if (currentHp == null) currentHp = maxHp;
+        if (currentHp > maxHp) currentHp = maxHp;
+
+        return out;
+    }
+
+    // ===== Migration: old saves that stored LEVEL instead of XP =====
+    /** Call this once after loading from disk to convert level→xp for legacy saves. */
+    public void migrateSkillsToXpIfNeeded() {
+        if (skills == null) skills = new EnumMap<>(SkillId.class);
+        EnumMap<SkillId, Integer> fixed = new EnumMap<>(SkillId.class);
+        for (SkillId id : SkillId.values()) {
+            int stored = skills.getOrDefault(id, 0);
+            // Heuristic: if stored value looks like a level (1..99), convert to XP.
+            if (stored > 0 && stored <= MAX_LEVEL && stored <= 99) {
+                int asLevel = stored;
+                int xp = xpToReachLevel(Math.max(1, asLevel));
+                fixed.put(id, xp);
+            } else {
+                fixed.put(id, Math.max(0, stored)); // already XP
+            }
+        }
+        skills = fixed;
+    }
+
+    // Snapshot struct for convenient access (level, xp, etc.)
+    public class SkillProgress {
+        public final SkillId id;
+        public final int xp;
+        public final int level;
+        public final int xpInto;
+        public final int xpForNext;
+
+        SkillProgress(SkillId id, int xp, int level, int xpInto, int xpForNext) {
+            this.id = id;
+            this.xp = xp;
+            this.level = level;
+            this.xpInto = xpInto;
+            this.xpForNext = xpForNext;
+        }
+
+        /** Adds XP to this skill and returns true if at least 1 level was gained. */
+        public boolean addXp(int amount) {
+            return PlayerCharacter.this.addSkillExp(id, amount);
         }
     }
 
-    // ---------- Quick Food ----------
-    public String getQuickFoodId() { return quickFoodId; }
-    public void setQuickFoodId(String quickFoodId) { this.quickFoodId = quickFoodId; }
-
-    /** Heals up to {@code amount}, clamped by {@code maxHp}. Returns actual healed value. */
-    public int heal(int amount, int maxHp) {
-        if (amount <= 0) return 0;
-        int cur = currentHp == null ? maxHp : currentHp;
-        int newHp = Math.min(maxHp, Math.max(0, cur) + amount);
-        int healed = newHp - cur;
-        currentHp = newHp;
-        return healed;
-    }
-
-    /** Get-or-create the Skill object for a given id. */
-    public Skill skill(SkillId id) {
-        Skill s = skills.get(id);
-        if (s == null) {
-            s = new Skill(); // level 1, 0 xp
-            skills.put(id, s);
-        }
-        return s;
-    }
-
-    /** Convenience: current level for a skill (always >=1). */
-    public int getSkillLevel(SkillId id) { return skill(id).level; }
-
-    /** Add XP to a skill and return whether it leveled up. */
-    public boolean addSkillExp(SkillId id, int amount) { return skill(id).addXp(amount); }
-
-    // ---------- Small utilities ----------
-
-    private static int safeAdd(int a, int b) {
-        long x = (long) a + (long) b;
-        if (x > Integer.MAX_VALUE) return Integer.MAX_VALUE;
-        if (x < Integer.MIN_VALUE) return Integer.MIN_VALUE;
-        return (int) x;
-    }
-
-    private static double clamp01(double v) {
-        if (v < 0) return 0;
-        if (v > 1) return 1;
-        return v;
+    /** Convenience accessor used by older code: player.skill(id).level, etc. */
+    public SkillProgress skill(SkillId id) {
+        int xp = getSkillExp(id);
+        int level = getSkillLevel(id);
+        return new SkillProgress(
+                id,
+                xp,
+                level,
+                xpIntoLevel(xp, level),
+                xpForNextLevel(level)
+        );
     }
 }

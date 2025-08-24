@@ -19,7 +19,7 @@ public class SkillService {
     public @Nullable Action getRunning() { return running; }
 
     public boolean canStart(Action a) {
-        return repo.loadOrCreatePlayer().skill(a.skill).level >= a.reqLevel;
+        return repo.loadOrCreatePlayer().getSkillLevel(a.skill) >= a.reqLevel;
     }
 
     public boolean start(Action a) {

@@ -20,25 +20,16 @@ import java.util.Map;
 
 /**
  * Runs a chosen non-combat Action in a loop and reports progress back to the UI.
- * - Grants gathered outputs directly (no pending buffer) without per-item toasts
- * - Adds Skill XP without a level-up toast (but keeps XP/h tracking)
- * - Emits a single combined toast per completion (suppressed during offline catch-up)
+ * - Directly grants outputs (no pending buffer).
+ * - Adds Skill XP via GameRepository.
+ * - One toast per completion (suppressed during offline catch-up).
  */
 public class ActionEngine {
 
-    // ---- Listener API for the fragment ----
     public interface Listener {
-        /** Called many times while an action is in progress. */
-        @MainThread
-        void onTick(Action action, int progressPercent, long elapsedMs, long remainingMs);
-
-        /** Called when one action iteration completes (after rewards/xp are granted). */
-        @MainThread
-        void onActionComplete(Action action, boolean leveledUp);
-
-        /** Called when the loop starts/stops. */
-        @MainThread
-        void onLoopStateChanged(boolean running);
+        @MainThread void onTick(Action action, int progressPercent, long elapsedMs, long remainingMs);
+        @MainThread void onActionComplete(Action action, boolean leveledUp);
+        @MainThread void onLoopStateChanged(boolean running);
     }
 
     private final Context app;
@@ -50,12 +41,10 @@ public class ActionEngine {
     @Nullable private Action current;
     @Nullable private Listener listener;
 
-    // ---- persistence keys (to restore after relaunch) ----
     private static final String SP_NAME = "akthos_idle_engine";
     private static final String KEY_RUN_ACTION_ID = "run_action_id";
-    private static final String KEY_RUN_STARTED_AT = "run_started_at"; // SystemClock.uptimeMillis()
+    private static final String KEY_RUN_STARTED_AT = "run_started_at";
     private static final String KEY_RUN_SKILL = "run_skill";
-    // Cap the offline catch-up window (e.g., 2 hours)
     private static final long MAX_OFFLINE_MS = 2L * 60L * 60L * 1000L;
 
     private final SharedPreferences engineSp;
@@ -68,9 +57,19 @@ public class ActionEngine {
 
     public void setListener(@Nullable Listener l) { this.listener = l; }
 
+    /** NEW: expose current running state */
+    public boolean isRunning() { return running; }
+
+    /** NEW: get persisted running skill if any (used after restore) */
+    @Nullable public SkillId getPersistedRunningSkill() {
+        String s = engineSp.getString(KEY_RUN_SKILL, null);
+        if (s == null) return null;
+        try { return SkillId.valueOf(s); } catch (IllegalArgumentException e) { return null; }
+    }
+
     /** Start infinite loop for the given action (restarts if already running). */
     public synchronized void startLoop(Action action) {
-        stop(); // ensure a clean single loop
+        stop(); // ensure clean
         this.current = action;
         this.running = true;
 
@@ -82,7 +81,7 @@ public class ActionEngine {
         postLoopState(true);
     }
 
-    /** Stop the loop gracefully. Safe to call multiple times. */
+    /** Stop the loop gracefully. */
     public synchronized void stop() {
         running = false;
         if (worker != null) {
@@ -113,7 +112,6 @@ public class ActionEngine {
         return true;
     }
 
-    // ---- core loops ----
     private void runLoopFromNow() {
         final Action a = this.current;
         if (a == null) return;
@@ -126,79 +124,61 @@ public class ActionEngine {
         long elapsed = Math.max(0, now - startedAt);
         long cappedElapsed = Math.min(elapsed, MAX_OFFLINE_MS);
 
-        // Grant complete cycles from the offline window (no toasts to avoid spam)
         long cycles = cappedElapsed / duration;
         for (long i = 0; running && i < cycles; i++) {
-            boolean leveled = grantRewardsAndXp(a, /*showToast=*/false);
+            boolean leveled = grantRewardsAndXp(a, false);
             postCompleted(a, leveled);
         }
 
-        // Continue from any partial remainder as if started 'remainderStart'
         long remainderStart = now - (cappedElapsed % duration);
         loopFromStartTime(a, remainderStart);
     }
 
-    /** Loop forever, starting a cycle at the provided start time. */
     private void loopFromStartTime(Action a, long startTimeMs) {
         long start = startTimeMs;
         while (running) {
             long duration = Math.max(500L, a.durationMs > 0 ? a.durationMs : 3000L);
             long end   = start + duration;
 
-            // progress updates
             while (running) {
                 long now = SystemClock.uptimeMillis();
                 long elapsed = now - start;
                 int percent = (int) Math.min(100, (elapsed * 100) / duration);
                 long remaining = Math.max(0, end - now);
-
                 postTick(a, percent, elapsed, remaining);
-
                 if (now >= end) break;
                 try { Thread.sleep(50); } catch (InterruptedException ignored) {}
             }
 
             if (!running) break;
 
-            // grant rewards + xp after the bar reaches 100%
-            boolean leveled = grantRewardsAndXp(a, /*showToast=*/true);
+            boolean leveled = grantRewardsAndXp(a, true);
             postCompleted(a, leveled);
 
-            // next cycle starts now
             start = SystemClock.uptimeMillis();
-
-            // Update persisted start to keep offline resume accurate
             persistStart(a, start);
         }
     }
 
-    // ---- reward/xp ----
     @WorkerThread
     private boolean grantRewardsAndXp(Action a, boolean showToast) {
-        // Build a combined toast like: "+2× Log, +1× Bark (+5 XP)"
         StringBuilder toastMsg = new StringBuilder();
 
-        // Outputs: direct grant to inventory or currency (no per-item toasts)
         if (a.outputs != null && !a.outputs.isEmpty()) {
             boolean first = true;
             for (Map.Entry<String, Integer> e : a.outputs.entrySet()) {
                 String idOrCurrency = e.getKey();
                 int qty = Math.max(1, e.getValue());
 
-                // Save directly without toasting:
+                repo.grantGathered(idOrCurrency, qty, null); // direct save
+
+                String pretty;
                 if (idOrCurrency != null && idOrCurrency.startsWith("currency:")) {
                     String code = idOrCurrency.substring("currency:".length());
-                    repo.addCurrency(code, qty); // publishes balances; silent
+                    pretty = capitalize(code);
                 } else {
-                    PlayerCharacter pc = repo.loadOrCreatePlayer();
-                    pc.addItem(idOrCurrency, qty);
-                    repo.save(); // persist inventory
+                    pretty = repo.itemName(idOrCurrency);
                 }
-
-                // Pretty name for the single combined toast
-                String pretty = (idOrCurrency != null && idOrCurrency.startsWith("currency:"))
-                        ? capitalize(idOrCurrency.substring("currency:".length()))
-                        : repo.itemName(idOrCurrency);
 
                 if (!first) toastMsg.append(", ");
                 toastMsg.append("+").append(qty).append("× ").append(pretty);
@@ -206,29 +186,21 @@ public class ActionEngine {
             }
         }
 
-        // XP: add without triggering repository's level-up toast; keep XP/h tracking
         int xp = (a.exp > 0) ? a.exp : 5;
         boolean leveledUp = false;
-        SkillId sid = a.skill;
-        if (sid != null && xp > 0) {
-            PlayerCharacter pc = repo.loadOrCreatePlayer();
-            leveledUp = pc.addSkillExp(sid, xp); // no toast here
-            repo.save();
-            // keep the XP/hour graph accurate
-            repo.xpTracker.note("skill:" + sid.name().toLowerCase(), xp);
+        if (a.skill != null && xp > 0) {
+            leveledUp = repo.addSkillExp(a.skill, xp);
         }
 
         if (showToast) {
             final String msg = (toastMsg.length() > 0)
                     ? (toastMsg + " (+" + xp + " XP)")
                     : ("+" + xp + " XP");
-            main.post(() -> repo.toast(msg)); // one toast only, on main thread
+            main.post(() -> repo.toast(msg));
         }
-
         return leveledUp;
     }
 
-    // ---- persistence helpers ----
     private void persistStart(Action a, long startedAt) {
         engineSp.edit()
                 .putString(KEY_RUN_ACTION_ID, a.id)
@@ -245,19 +217,16 @@ public class ActionEngine {
                 .apply();
     }
 
-    // ---- UI posting helpers ----
     private void postTick(Action a, int percent, long elapsed, long remaining) {
         Listener l = listener;
         if (l == null) return;
         main.post(() -> l.onTick(a, percent, elapsed, remaining));
     }
-
     private void postCompleted(Action a, boolean leveled) {
         Listener l = listener;
         if (l == null) return;
         main.post(() -> l.onActionComplete(a, leveled));
     }
-
     private void postLoopState(boolean state) {
         Listener l = listener;
         if (l == null) return;

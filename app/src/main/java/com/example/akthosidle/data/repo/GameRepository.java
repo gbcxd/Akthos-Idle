@@ -34,6 +34,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Comparator;
+import java.util.Collections;
+
 
 public class GameRepository {
 
@@ -87,7 +90,7 @@ public class GameRepository {
         loadItemsFromAssets();
         loadMonstersFromAssets();
         loadActionsFromAssets();
-        loadShopFromAssets(); // NEW
+        loadShopFromAssets();
     }
 
     public void loadActionsFromAssets() {
@@ -126,7 +129,7 @@ public class GameRepository {
                     it.rarity = o.optString("rarity", null);
                     if (o.has("heal")) it.heal = o.optInt("heal");
 
-                    // parse stats if present
+                    // stats
                     JSONObject s = o.optJSONObject("stats");
                     if (s != null) {
                         it.stats = new Stats(
@@ -139,7 +142,7 @@ public class GameRepository {
                         );
                     }
 
-                    // parse skillBuffs if present
+                    // skill buffs
                     JSONObject sb = o.optJSONObject("skillBuffs");
                     if (sb != null) {
                         it.skillBuffs = new HashMap<>();
@@ -173,7 +176,7 @@ public class GameRepository {
         } catch (Exception ignored) {}
     }
 
-    // NEW: load shop
+    // Shop
     public void loadShopFromAssets() {
         if (!shop.isEmpty()) return;
         try (InputStream is = app.getAssets().open(ASSET_SHOP)) {
@@ -217,6 +220,9 @@ public class GameRepository {
             if (player.skills == null) player.skills = new EnumMap<>(SkillId.class);
             if (player.currencies == null) player.currencies = new HashMap<>();
             if (player.base == null) player.base = new Stats(12, 6, 0.0, 100, 0.05, 1.5);
+
+            // migrate legacy skill storage to XP if needed
+            player.migrateSkillsToXpIfNeeded();
 
             if (player.base.health <= 0) player.base.health = 100;
             if (player.base.critMultiplier < 1.0) player.base.critMultiplier = 1.5;
@@ -320,6 +326,23 @@ public class GameRepository {
     }
 
     /* ============================
+     * Skill helpers (for UI)
+     * ============================ */
+    public int skillLevel(SkillId id) { return loadOrCreatePlayer().getSkillLevel(id); }
+    public int skillExp(SkillId id)    { return loadOrCreatePlayer().getSkillExp(id); }
+
+    public int skillXpIntoLevel(SkillId id) {
+        int xp = skillExp(id);
+        int lvl = PlayerCharacter.levelForExp(xp);
+        return PlayerCharacter.xpIntoLevel(xp, lvl);
+    }
+
+    public int skillXpForNextLevel(SkillId id) {
+        int lvl = skillLevel(id);
+        return PlayerCharacter.xpForNextLevel(lvl);
+    }
+
+    /* ============================
      * XP helpers
      * ============================ */
     public void addPlayerExp(int amount) {
@@ -337,8 +360,11 @@ public class GameRepository {
         boolean leveled = pc.addSkillExp(id, amount);
         save();
         xpTracker.note("skill:" + id.name().toLowerCase(), amount);
-        if (leveled) toast(id.name().charAt(0) + id.name().substring(1).toLowerCase() +
-                " Lv " + pc.getSkillLevel(id) + "!");
+        if (leveled) {
+            if (id == SkillId.HP) publishHp(); // Max HP changed via skill → update observers
+            toast(id.name().charAt(0) + id.name().substring(1).toLowerCase() +
+                    " Lv " + pc.getSkillLevel(id) + "!");
+        }
         return leveled;
     }
 
@@ -870,6 +896,80 @@ public class GameRepository {
      * ============================ */
     public void setLastSeen(long ms) { sp.edit().putLong(KEY_LAST_SEEN, ms).apply(); }
     public long getLastSeen() { return sp.getLong(KEY_LAST_SEEN, System.currentTimeMillis()); }
+
+    /* ============================
+     * Per-skill “last picked action” (UX)
+     * ============================ */
+    private static String keyLastActionFor(SkillId skill) {
+        return "last_action_" + (skill != null ? skill.name() : "unknown");
+    }
+
+    public void saveLastActionForSkill(@Nullable SkillId skill, @Nullable String actionId) {
+        if (skill == null || actionId == null) return;
+        sp.edit().putString(keyLastActionFor(skill), actionId).apply();
+    }
+
+    @Nullable
+    public String getLastActionForSkill(@Nullable SkillId skill) {
+        if (skill == null) return null;
+        return sp.getString(keyLastActionFor(skill), null);
+    }
+
+    /** ---------- Helpers expected by SkillDetailFragment ---------- */
+
+    /** True if the player meets this action’s level requirement. */
+    public boolean isUnlocked(@Nullable Action a) {
+        if (a == null || a.skill == null) return false;
+        int playerLevel = skillLevel(a.skill);
+        int req = Math.max(1, a.reqLevel);
+        return playerLevel >= req;
+    }
+
+    /**
+     * Returns the best unlocked (highest reqLevel) action for this skill,
+     * or null if none are unlocked yet.
+     */
+    @Nullable
+    public Action bestUnlockedFor(@Nullable SkillId skill) {
+        if (skill == null) return null;
+        int lvl = skillLevel(skill);
+        Action best = null;
+        int bestReq = -1;
+        for (Action a : actions.values()) {
+            if (a == null || a.skill != skill) continue;
+            int req = Math.max(1, a.reqLevel);
+            if (lvl >= req && req > bestReq) {
+                best = a;
+                bestReq = req;
+            }
+        }
+        return best;
+    }
+
+    /** Persist the last-picked action for UX. */
+    public void setLastPickedAction(@Nullable SkillId skill, @Nullable String actionId) {
+        saveLastActionForSkill(skill, actionId);
+    }
+
+    /** Convenience overload. */
+    public void setLastPickedAction(@Nullable Action a) {
+        if (a != null) saveLastActionForSkill(a.skill, a.id);
+    }
+
+    /**
+     * Returns the last-picked Action for this skill if present and still unlocked.
+     * Otherwise falls back to the best currently unlocked action. May return null.
+     */
+    @Nullable
+    public Action getLastPickedAction(@Nullable SkillId skill) {
+        if (skill == null) return null;
+        String savedId = getLastActionForSkill(skill);
+        if (savedId != null) {
+            Action saved = getAction(savedId);
+            if (isUnlocked(saved)) return saved;
+        }
+        return bestUnlockedFor(skill);
+    }
 
     /* ============================
      * Utils
