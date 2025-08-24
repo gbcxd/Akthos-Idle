@@ -83,7 +83,7 @@
         android:id="@+id/bankFragment"
         android:name="com.example.akthosidle.ui.stashFragment"
         android:label="Bank"
-        tools:layout="@layout/fragment_bank" />
+        tools:layout="@layout/fragment_stash" />
 
     <fragment
         android:id="@+id/forgeFragment"
