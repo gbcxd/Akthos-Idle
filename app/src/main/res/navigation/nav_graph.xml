@@ -5,6 +5,7 @@
     android:id="@+id/nav_graph"
     app:startDestination="@id/nav_battle">
 
+    <!-- Core tabs -->
     <fragment
         android:id="@+id/nav_battle"
         android:name="com.example.akthosidle.ui.BattleFragment"
@@ -23,47 +24,86 @@
         android:label="Inventory"
         tools:layout="@layout/fragment_inventory" />
 
-    <!-- Skills list -->
     <fragment
         android:id="@+id/nav_skills"
         android:name="com.example.akthosidle.ui.SkillsFragment"
         android:label="Skills"
         tools:layout="@layout/fragment_skills">
 
-        <!-- Navigate from Skills list → Skill detail -->
         <action
             android:id="@+id/action_nav_skills_to_skillDetail"
             app:destination="@id/skillDetailFragment" />
     </fragment>
 
-    <!-- Skill detail (spinner, start/cancel, progress) -->
     <fragment
         android:id="@+id/skillDetailFragment"
         android:name="com.example.akthosidle.ui.skill.SkillDetailFragment"
         android:label="Skill"
         tools:layout="@layout/fragment_skill_detail">
-
         <argument
             android:name="skillId"
             app:argType="string"
             android:defaultValue="MINING" />
     </fragment>
 
+    <!-- The bottom-tab “Settings” now opens Basecamp -->
     <fragment
         android:id="@+id/nav_settings"
-        android:name="com.example.akthosidle.ui.SettingsFragment"
-        android:label="Settings"
-        tools:layout="@layout/fragment_settings" />
+        android:name="com.example.akthosidle.ui.basecampFragment"
+        android:label="Basecamp"
+        tools:layout="@layout/fragment_basecamp" />
 
+    <!-- Store / Shop (provide both ids; Basecamp uses storeFragment) -->
     <fragment
-        android:id="@+id/shopFragment"
-        android:name="com.example.akthosidle.ui.shop.ShopFragment"
+        android:id="@+id/storeFragment"
+        android:name="com.example.akthosidle.ui.store.shopFragment"
         android:label="Shop"
-        tools:layout="@layout/fragment_shop"/>
+        tools:layout="@layout/fragment_shop" />
 
+    <!-- Gold purchase from toolbar + in shop -->
     <fragment
         android:id="@+id/buyGoldFragment"
         android:name="com.example.akthosidle.ui.store.BuyGoldFragment"
         android:label="@string/buy_gold_title"
         tools:layout="@layout/fragment_buy_gold" />
+
+    <!-- Basecamp tiles -->
+    <fragment
+        android:id="@+id/questsFragment"
+        android:name="com.example.akthosidle.ui.questsFragment"
+        android:label="Quests"
+        tools:layout="@layout/fragment_quests" />
+
+    <fragment
+        android:id="@+id/achievementsFragment"
+        android:name="com.example.akthosidle.ui.achievementsFragment"
+        android:label="Achievements"
+        tools:layout="@layout/fragment_achievements" />
+
+    <fragment
+        android:id="@+id/bankFragment"
+        android:name="com.example.akthosidle.ui.bankFragment"
+        android:label="Bank"
+        tools:layout="@layout/fragment_bank" />
+
+    <fragment
+        android:id="@+id/forgeFragment"
+        android:name="com.example.akthosidle.ui.forgeFragment"
+        android:label="Forge"
+        tools:layout="@layout/fragment_forge" />
+
+    <!-- Options (actual settings/backup screen) -->
+    <fragment
+        android:id="@+id/optionsFragment"
+        android:name="com.example.akthosidle.ui.OptionsFragment"
+        android:label="Options"
+        tools:layout="@layout/fragment_options" />
+
+    <!-- About -->
+    <fragment
+        android:id="@+id/aboutFragment"
+        android:name="com.example.akthosidle.ui.aboutFragment"
+        android:label="About"
+        tools:layout="@layout/fragment_about" />
+
 </navigation>

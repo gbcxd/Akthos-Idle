@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Home / Basecamp hub with 3-column tiles for non-core menus. */
-public class BasecampFragment extends Fragment {
+public class basecampFragment extends Fragment {
 
     @Nullable
     @Override
