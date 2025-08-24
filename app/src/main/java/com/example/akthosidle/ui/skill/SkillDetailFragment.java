@@ -29,7 +29,6 @@ import com.example.akthosidle.ui.GameViewModel;
 import java.util.ArrayList;
 import java.util.List;
 
-
 public class SkillDetailFragment extends Fragment {
 
     private static final String ARG_SKILL_ID = "skillId";
@@ -45,7 +44,8 @@ public class SkillDetailFragment extends Fragment {
     private Action selectedAction;
     private boolean running = false;
 
-    @Nullable @Override
+    @Nullable
+    @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         return inflater.inflate(R.layout.fragment_skill_detail, container, false);
     }
@@ -62,9 +62,13 @@ public class SkillDetailFragment extends Fragment {
         tvActionReq      = v.findViewById(R.id.tvActionReq);
         btnToggle        = v.findViewById(R.id.btn_toggle);
 
+        if (progressBar != null) progressBar.setMax(100);
+
         vm = new ViewModelProvider(requireActivity()).get(GameViewModel.class);
 
-        String arg = requireArguments().getString(ARG_SKILL_ID, "MINING");
+        // Safe arg handling with fallback to MINING
+        Bundle args = getArguments();
+        String arg = (args != null) ? args.getString(ARG_SKILL_ID, "MINING") : "MINING";
         try { skillId = SkillId.valueOf(arg); } catch (IllegalArgumentException e) { skillId = SkillId.MINING; }
 
         PlayerCharacter pc = vm.player();
@@ -76,8 +80,9 @@ public class SkillDetailFragment extends Fragment {
 
         btnPickAction.setOnClickListener(vw -> openActionPicker());
         btnToggle.setOnClickListener(vw -> {
-            if (running) stopLoop();
-            else {
+            if (running) {
+                stopLoop();
+            } else {
                 if (selectedAction == null) {
                     tvStatus.setText(getString(R.string.pick_a_resource_first));
                     return;
@@ -87,25 +92,34 @@ public class SkillDetailFragment extends Fragment {
         });
     }
 
-    @Override public void onStart() {
+    @Override
+    public void onStart() {
         super.onStart();
-        // Attach listener to shared engine (no new engine here)
+
+        // Attach listener to the shared engine owned by the VM
         vm.setGatherListener(new ActionEngine.Listener() {
-            @Override public void onTick(@NonNull Action action, int percent, long elapsed, long remaining) {
+            @Override
+            public void onTick(@NonNull Action action, int percent, long elapsed, long remaining) {
                 if (!isAdded()) return;
-                progressBar.setProgress(percent);
-                tvTimer.setText(percent + "%");
+                int p = Math.max(0, Math.min(100, percent));
+                progressBar.setProgress(p);
+                tvTimer.setText(p + "%");
             }
-            @Override public void onActionComplete(@NonNull Action action, boolean leveledUp) {
+
+            @Override
+            public void onActionComplete(@NonNull Action action, boolean leveledUp) {
                 if (!isAdded()) return;
-                tvStatus.setText((leveledUp ? getString(R.string.level_up_short, vm.player().getSkillLevel(skillId))
-                        : getString(R.string.completed_fmt, action.name)));
                 if (leveledUp) {
                     int lvl = vm.player().getSkillLevel(skillId);
+                    tvStatus.setText(getString(R.string.level_up_short, lvl));
                     tvSkillTitle.setText(capitalize(skillId.name().toLowerCase()) + " (Lv " + lvl + ")");
+                } else {
+                    tvStatus.setText(getString(R.string.completed_fmt, action.name));
                 }
             }
-            @Override public void onLoopStateChanged(boolean runningNow) {
+
+            @Override
+            public void onLoopStateChanged(boolean runningNow) {
                 if (!isAdded()) return;
                 running = runningNow;
                 btnToggle.setText(runningNow ? getString(R.string.stop) : getString(R.string.play));
@@ -117,14 +131,20 @@ public class SkillDetailFragment extends Fragment {
                 }
             }
         });
-        // reflect actual state if restored
+
+        // Reflect actual state if engine was already running
         running = vm.isGatherRunning();
         btnToggle.setText(running ? getString(R.string.stop) : getString(R.string.play));
+
+        // If nothing is selected yet (e.g., first time entering), try again
+        if (selectedAction == null) applyInitialSelection();
     }
 
-    @Override public void onStop() {
+    @Override
+    public void onStop() {
         super.onStop();
-        vm.clearGatherListener(); // keep engine running if user navigates away
+        // Keep engine running across navigation; just detach callbacks
+        vm.setGatherListener(null); // safe even if clearGatherListener() exists
     }
 
     private void startLoop() {
@@ -157,7 +177,13 @@ public class SkillDetailFragment extends Fragment {
     private void setSelected(Action a) {
         selectedAction = a;
         if (tvSelectedAction != null) tvSelectedAction.setText(a.name);
-        if (tvActionReq != null) tvActionReq.setText(getString(R.string.req_and_duration_fmt, a.reqLevel, a.durationMs / 1000));
+        if (tvActionReq != null) {
+            tvActionReq.setText(getString(
+                    R.string.req_and_duration_fmt,
+                    Math.max(1, a.reqLevel),
+                    (int) Math.max(1, a.durationMs / 1000L)
+            ));
+        }
         // Save last-picked for this skill
         vm.repo.setLastPickedAction(skillId, a.id);
     }
@@ -174,7 +200,7 @@ public class SkillDetailFragment extends Fragment {
             return;
         }
 
-        ActionPickerDialog dlg = ActionPickerDialog.newInstance(unlocked, action -> setSelected(action));
+        ActionPickerDialog dlg = ActionPickerDialog.newInstance(unlocked, this::setSelected);
         dlg.show(getChildFragmentManager(), "action_picker");
     }
 
@@ -196,7 +222,8 @@ public class SkillDetailFragment extends Fragment {
             return f;
         }
 
-        @NonNull @Override
+        @NonNull
+        @Override
         public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
             Dialog d = new Dialog(requireContext());
             d.setContentView(R.layout.dialog_actions_grid);
@@ -220,15 +247,20 @@ public class SkillDetailFragment extends Fragment {
             VH(@NonNull View v) { super(v); img = v.findViewById(R.id.img); title = v.findViewById(R.id.title); }
         }
 
-        @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        @NonNull @Override
+        public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_action_icon, parent, false);
             return new VH(v);
         }
-        @Override public void onBindViewHolder(@NonNull VH h, int pos) {
+
+        @Override
+        public void onBindViewHolder(@NonNull VH h, int pos) {
             Action a = list.get(pos);
             h.title.setText(a.name);
             h.itemView.setOnClickListener(v -> click.onClick(a));
         }
-        @Override public int getItemCount() { return list.size(); }
+
+        @Override
+        public int getItemCount() { return list.size(); }
     }
 }

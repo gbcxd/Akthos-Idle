@@ -917,33 +917,49 @@ public class GameRepository {
 
     /** ---------- Helpers expected by SkillDetailFragment ---------- */
 
+    /** Compat: check unlock using a provided level. */
+    public boolean isUnlocked(@Nullable Action a, int currentLevel) {
+        if (a == null) return false;
+        int req = Math.max(1, a.reqLevel);
+        int lvl = Math.max(1, currentLevel);
+        return lvl >= req;
+    }
+
     /** True if the player meets this action’s level requirement. */
     public boolean isUnlocked(@Nullable Action a) {
         if (a == null || a.skill == null) return false;
         int playerLevel = skillLevel(a.skill);
-        int req = Math.max(1, a.reqLevel);
-        return playerLevel >= req;
+        return isUnlocked(a, playerLevel);
     }
 
     /**
-     * Returns the best unlocked (highest reqLevel) action for this skill,
-     * or null if none are unlocked yet.
+     * Returns the best unlocked (highest reqLevel) action for this skill
+     * given an explicit current level, or null if none are unlocked yet.
      */
     @Nullable
-    public Action bestUnlockedFor(@Nullable SkillId skill) {
+    public Action bestUnlockedFor(@Nullable SkillId skill, int currentLevel) {
         if (skill == null) return null;
-        int lvl = skillLevel(skill);
         Action best = null;
         int bestReq = -1;
         for (Action a : actions.values()) {
             if (a == null || a.skill != skill) continue;
             int req = Math.max(1, a.reqLevel);
-            if (lvl >= req && req > bestReq) {
+            if (currentLevel >= req && req > bestReq) {
                 best = a;
                 bestReq = req;
             }
         }
         return best;
+    }
+
+    /**
+     * Returns the best unlocked (highest reqLevel) action for this skill using the player's current level,
+     * or null if none are unlocked yet.
+     */
+    @Nullable
+    public Action bestUnlockedFor(@Nullable SkillId skill) {
+        if (skill == null) return null;
+        return bestUnlockedFor(skill, skillLevel(skill));
     }
 
     /** Persist the last-picked action for UX. */
