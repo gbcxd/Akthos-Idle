@@ -265,8 +265,8 @@ public class GameRepository {
 
     private int countInBag(String itemId) {
         PlayerCharacter pc = loadOrCreatePlayer();
-        String canon = canonicalItemId(itemId);
-        return pc.bag.getOrDefault(canon, 0);
+        String iid = canonicalItemId(itemId);
+        return pc.bag.getOrDefault(iid, 0);
     }
 
     // Map recipe ingredient ids to actual bag ids (handles legacy/raw names)
@@ -1288,13 +1288,14 @@ public class GameRepository {
                 || k.equals("ARCHERY") || k.equals("MAGIC");
     }
 
-    public String canonicalItemId(@Nullable String id) {
+    private static @Nullable String canonicalItemId(@Nullable String id) {
         if (id == null) return null;
-        switch (id.toLowerCase()) {
-            case "raw_shrimp": return "fish_raw_shrimp"; // alias -> real id
-            // add more aliases here as you grow recipes
-            default: return id;
+        String s = id.toLowerCase();
+        // All these should count as the same thing:
+        if (s.equals("raw_shrimp") || s.equals("shore_shrimp") || s.equals("shrimp_raw")) {
+            return "fish_raw_shrimp";
         }
+        return id;
     }
 
     /* ============================
