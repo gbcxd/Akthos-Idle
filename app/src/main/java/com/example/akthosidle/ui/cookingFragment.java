@@ -111,22 +111,19 @@ public class cookingFragment extends Fragment {
         if (r.inputs != null && !r.inputs.isEmpty()) {
             for (RecipeIO in : r.inputs) {
                 if (in == null || in.id == null) continue;
-                String needId = vm.repo.normalizeItemIdForBag(in.id);   // <-- use alias
+                String needId = vm.repo.canonicalItemId(in.id);
+                int needQty = Math.max(1, in.qty);
                 int have = bag.getOrDefault(needId, 0);
-                int canMake = (in.qty <= 0) ? 0 : (have / in.qty);
+                int canMake = have / needQty;
                 maxCraft = Math.min(maxCraft, canMake);
-
-                if (have < in.qty) {
-                    int need = Math.max(0, in.qty - have);
-                    String niceName = vm.repo.itemName(needId);
-                    row.reasons.add("Need " + niceName + " ×" + need);
+                if (have < needQty) {
+                    row.reasons.add("Need " + vm.repo.itemName(needId) + " ×" + (needQty - have));
                 }
             }
         } else {
             maxCraft = 0;
         }
-        if (maxCraft == Integer.MAX_VALUE) maxCraft = 0;
-        row.maxCraftable = maxCraft;
+        row.maxCraftable = (maxCraft == Integer.MAX_VALUE) ? 0 : maxCraft;
 
         row.craftable = (row.maxCraftable > 0 && row.reasons.isEmpty());
 

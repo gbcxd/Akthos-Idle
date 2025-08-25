@@ -265,7 +265,8 @@ public class GameRepository {
 
     private int countInBag(String itemId) {
         PlayerCharacter pc = loadOrCreatePlayer();
-        return pc.bag.getOrDefault(itemId, 0);
+        String canon = canonicalItemId(itemId);
+        return pc.bag.getOrDefault(canon, 0);
     }
 
     // Map recipe ingredient ids to actual bag ids (handles legacy/raw names)
@@ -299,6 +300,7 @@ public class GameRepository {
     }
 
 
+    /** One-shot craft (consumes items, gives outputs & XP). Returns success. */
     public boolean craft(String recipeId, int times) {
         Recipe r = getRecipe(recipeId);
         if (r == null || times <= 0) { toast("Invalid recipe"); return false; }
@@ -308,16 +310,18 @@ public class GameRepository {
 
         // consume inputs
         if (r.inputs != null) {
+            // safety pre-check
             for (RecipeIO in : r.inputs) {
                 if (in == null || in.id == null || in.qty <= 0) continue;
-                String needId = resolveIngredientId(in.id);
+                String needId = canonicalItemId(in.id);
                 int need = in.qty * times;
                 int have = pc.bag.getOrDefault(needId, 0);
                 if (have < need) { toast("Missing materials"); return false; }
             }
+            // consume
             for (RecipeIO in : r.inputs) {
                 if (in == null || in.id == null || in.qty <= 0) continue;
-                String needId = resolveIngredientId(in.id);
+                String needId = canonicalItemId(in.id);
                 int need = in.qty * times;
                 int have = pc.bag.getOrDefault(needId, 0);
                 pc.bag.put(needId, have - need);
@@ -334,7 +338,9 @@ public class GameRepository {
         }
 
         // XP
-        if (r.xp > 0 && r.skill != null) addSkillExp(r.skill, r.xp * times);
+        if (r.xp > 0 && r.skill != null) {
+            addSkillExp(r.skill, r.xp * times);
+        }
 
         save();
         toast("Crafted ×" + times + " " + (r.name != null ? r.name : r.id));
@@ -342,59 +348,68 @@ public class GameRepository {
     }
 
 
+
+    /** Craft exactly one unit (used by Cooking screen). */
     public boolean craftOnce(String id) {
         if (id == null || id.isEmpty()) return false;
+
         Recipe r = getRecipe(id);
         if (r == null) { toast("Unknown recipe"); return false; }
 
+        // Level gate
         int level = skillLevel(r.skill);
         if (level < Math.max(1, r.reqLevel)) {
-            toast((r.name != null ? r.name : r.id) + " needs Lv " + r.reqLevel);
+            toast((r.name != null ? r.name : r.id) + " requires Lv " + r.reqLevel);
             return false;
         }
 
         PlayerCharacter pc = loadOrCreatePlayer();
 
-        // check inputs
-        if (r.inputs == null || r.inputs.isEmpty()) { toast("Recipe has no inputs"); return false; }
+        // Check inputs
+        if (r.inputs == null || r.inputs.isEmpty()) {
+            toast("Recipe has no inputs"); return false;
+        }
         for (RecipeIO in : r.inputs) {
             if (in == null || in.id == null || in.qty <= 0) continue;
-            String needId = resolveIngredientId(in.id);
+            String needId = canonicalItemId(in.id);
+            int needQty = Math.max(1, in.qty);
             int have = pc.bag.getOrDefault(needId, 0);
-            if (have < in.qty) {
-                toast("Need " + itemName(needId) + " ×" + in.qty);
+            if (have < needQty) {
+                toast("Need " + itemName(needId) + " ×" + needQty);
                 return false;
             }
         }
 
-        // consume inputs
+        // Consume inputs
         for (RecipeIO in : r.inputs) {
             if (in == null || in.id == null || in.qty <= 0) continue;
-            String needId = resolveIngredientId(in.id);
+            String needId = canonicalItemId(in.id);
+            int needQty = Math.max(1, in.qty);
             int have = pc.bag.getOrDefault(needId, 0);
-            pc.bag.put(needId, have - in.qty);
+            pc.bag.put(needId, Math.max(0, have - needQty));
             if (pc.bag.get(needId) != null && pc.bag.get(needId) <= 0) pc.bag.remove(needId);
         }
 
-        // grant outputs
-        String toastLabel = (r.name != null ? r.name : r.id);
+        // Grant outputs
         int totalOut = 0;
+        String toastLabel = (r.name != null ? r.name : r.id);
         if (r.outputs != null) {
             for (RecipeIO out : r.outputs) {
                 if (out == null || out.id == null || out.qty <= 0) continue;
                 pc.addItem(out.id, out.qty);
                 totalOut += out.qty;
-                toastLabel = itemName(out.id);
+                toastLabel = itemName(out.id); // use real item name if single
             }
         }
 
+        // XP
         if (r.xp > 0 && r.skill != null) addSkillExp(r.skill, r.xp);
-        save();
 
-        if (totalOut > 0) toast("Cooked " + toastLabel + " ×" + totalOut);
-        else toast("Crafted " + (r.name != null ? r.name : r.id));
+        save();
+        toast((r.skill == SkillId.COOKING ? "Cooked " : "Crafted ") + toastLabel + " ×" + Math.max(1, totalOut));
         return true;
     }
+
 
 
     /* ============================
@@ -1287,6 +1302,15 @@ public class GameRepository {
         String k = skill.toUpperCase();
         return k.equals("ATTACK") || k.equals("STRENGTH") || k.equals("DEFENSE") || k.equals("HP")
                 || k.equals("ARCHERY") || k.equals("MAGIC");
+    }
+
+    public String canonicalItemId(@Nullable String id) {
+        if (id == null) return null;
+        switch (id.toLowerCase()) {
+            case "raw_shrimp": return "fish_raw_shrimp"; // alias -> real id
+            // add more aliases here as you grow recipes
+            default: return id;
+        }
     }
 
     /* ============================
