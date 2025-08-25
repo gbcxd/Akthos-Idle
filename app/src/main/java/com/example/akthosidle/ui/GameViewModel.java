@@ -12,6 +12,7 @@ import com.example.akthosidle.data.repo.GameRepository;
 import com.example.akthosidle.domain.model.EquipmentSlot;
 import com.example.akthosidle.domain.model.PlayerCharacter;
 import com.example.akthosidle.domain.model.SkillId;
+import com.example.akthosidle.domain.model.SlayerAssignment;
 import com.example.akthosidle.engine.CombatEngine;
 import com.example.akthosidle.engine.ActionEngine;
 import com.example.akthosidle.domain.model.Action;
@@ -20,10 +21,8 @@ import java.util.List;
 
 public class GameViewModel extends AndroidViewModel {
 
-    public final GameRepository repo;
+    public final GameRepository repo;              // keep public to avoid breaking your code
     private final CombatEngine combatEngine;
-
-    // NEW: single shared gather engine
     private final ActionEngine gatherEngine;
 
     private final MutableLiveData<Boolean> autoRespawn = new MutableLiveData<>(false);
@@ -36,7 +35,7 @@ public class GameViewModel extends AndroidViewModel {
 
         combatEngine = new CombatEngine(repo);
 
-        // Gather engine (shared) + try to restore ongoing loop
+        // Shared gather engine + restore if needed
         gatherEngine = new ActionEngine(app.getApplicationContext(), repo);
         boolean restored = gatherEngine.restoreIfRunning();
         if (restored) {
@@ -50,6 +49,7 @@ public class GameViewModel extends AndroidViewModel {
     public LiveData<List<String>> combatLog() { return combatEngine.log(); }
     public LiveData<List<InventoryItem>> pendingLoot() { return repo.pendingLootLive; }
     public LiveData<Boolean> autoRespawn() { return autoRespawn; }
+    public LiveData<SlayerAssignment> slayer() { return repo.slayerLive; }   // NEW
 
     public void setAutoRespawn(boolean enabled) { autoRespawn.setValue(enabled); }
 
@@ -88,17 +88,26 @@ public class GameViewModel extends AndroidViewModel {
     public void setGatherListener(ActionEngine.Listener l) { gatherEngine.setListener(l); }
     public void clearGatherListener() { gatherEngine.setListener(null); }
     public boolean isGatherRunning() { return gatherEngine.isRunning(); }
-
     public void startGather(Action a) {
         if (a == null) return;
         if (a.skill != null) repo.startGathering(a.skill);
         gatherEngine.startLoop(a);
     }
-
     public void stopGather() {
         gatherEngine.stop();
         repo.stopGathering();
     }
+
+    // ===== Slayer helpers (UI-friendly pass-throughs) =====
+    public SlayerAssignment rollNewSlayerTaskRandom(String regionId, boolean forceReplace) {
+        return repo.rollNewSlayerTask(regionId, forceReplace);
+    }
+    public SlayerAssignment rollNewSlayerTaskForSelection(String regionId, String monsterId) {
+        // requires the overload in GameRepository (see below)
+        return repo.rollNewSlayerTask(regionId, monsterId);
+    }
+    public boolean abandonSlayerTask() { return repo.abandonSlayerTask(); }
+    public boolean claimSlayerTaskIfComplete() { return repo.claimSlayerTaskIfComplete(); }
 
     @Override
     protected void onCleared() {
