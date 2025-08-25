@@ -4,15 +4,19 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.NavController;
@@ -22,83 +26,166 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.akthosidle.R;
+import com.example.akthosidle.data.repo.GameRepository;
 import com.example.akthosidle.domain.model.Monster;
 import com.example.akthosidle.domain.model.SlayerAssignment;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/** Home / Basecamp hub with 3-column tiles + Slayer NPC card at top. */
 public class basecampFragment extends Fragment {
 
     private GameViewModel vm;
 
     // Slayer card views
-    private View slayerCard;
-    private ImageView slayerPortrait;
-    private TextView slayerTitle, slayerSubtitle, slayerTaskLine;
-    private ProgressBar slayerProgress;
-    private Button btnGetTask, btnAbandonTask, btnClaimTask;
+    private TextView tvSlayerTitle, tvSlayerRegion, tvSlayerBody;
+    private Button btnPick, btnAbandon, btnClaim;
+    private ProgressBar prog;
 
     @Nullable
     @Override
-    public View onCreateView(
-            @NonNull LayoutInflater inflater,
-            @Nullable ViewGroup container,
-            @Nullable Bundle savedInstanceState
-    ) {
+    public View onCreateView(@NonNull LayoutInflater inflater,
+                             @Nullable ViewGroup container,
+                             @Nullable Bundle savedInstanceState) {
         return inflater.inflate(R.layout.fragment_basecamp, container, false);
     }
 
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle s) {
         super.onViewCreated(v, s);
-
         vm = new ViewModelProvider(requireActivity()).get(GameViewModel.class);
 
-        // ----- Tiles grid (kept as before) -----
+        // ---- Slayer card ----
+        tvSlayerTitle  = v.findViewById(R.id.tvSlayerTitle);
+        tvSlayerRegion = v.findViewById(R.id.tvSlayerRegion);
+        tvSlayerBody   = v.findViewById(R.id.tvSlayerBody);
+        btnPick        = v.findViewById(R.id.btnSlayerPick);
+        btnAbandon     = v.findViewById(R.id.btnSlayerAbandon);
+        btnClaim       = v.findViewById(R.id.btnSlayerClaim);
+        prog           = v.findViewById(R.id.progSlayer);
+
+        btnPick.setOnClickListener(_v -> openSlayerPicker());
+        btnAbandon.setOnClickListener(_v -> {
+            boolean ok = vm.repo.abandonSlayerTask();
+            if (!ok) vm.repo.toast("No active task to abandon.");
+        });
+        btnClaim.setOnClickListener(_v -> {
+            boolean ok = vm.repo.claimSlayerTaskIfComplete();
+            if (!ok) vm.repo.toast("Task not complete yet.");
+        });
+
+        // Observe repository slayer LiveData
+        vm.repo.slayerLive.observe(getViewLifecycleOwner(), this::renderSlayerCard);
+        renderSlayerCard(vm.repo.getSlayerAssignment()); // initial paint
+
+        // ---- Tiles grid (unchanged) ----
         RecyclerView rv = v.findViewById(R.id.recyclerBasecamp);
         rv.setLayoutManager(new GridLayoutManager(requireContext(), 3));
         rv.setAdapter(new TilesAdapter(buildTiles(), NavHostFragment.findNavController(this)));
-
-        // ----- Slayer NPC card wiring -----
-        slayerCard      = v.findViewById(R.id.slayer_card);
-        slayerPortrait  = v.findViewById(R.id.slayer_portrait);
-        slayerTitle     = v.findViewById(R.id.slayer_title);
-        slayerSubtitle  = v.findViewById(R.id.slayer_subtitle);
-        slayerTaskLine  = v.findViewById(R.id.slayer_task_line);
-        slayerProgress  = v.findViewById(R.id.slayer_progress);
-        btnGetTask      = v.findViewById(R.id.btn_get_task);
-        btnAbandonTask  = v.findViewById(R.id.btn_abandon_task);
-        btnClaimTask    = v.findViewById(R.id.btn_claim_task);
-
-        slayerTitle.setText("Slayer Master");
-        // Use your own drawable if you have one:
-        slayerPortrait.setImageResource(android.R.drawable.ic_menu_help);
-
-        btnGetTask.setOnClickListener(_v -> {
-            SlayerAssignment cur = vm.repo.getSlayerAssignment();
-            if (cur != null && !cur.isComplete()) {
-                // already have a task — replace it
-                vm.repo.rollNewSlayerTask(/*forceReplace=*/true);
-            } else {
-                vm.repo.rollNewSlayerTask();
-            }
-        });
-
-        btnAbandonTask.setOnClickListener(_v -> vm.repo.abandonSlayerTask());
-
-        btnClaimTask.setOnClickListener(_v -> {
-            boolean ok = vm.repo.claimSlayerTaskIfComplete();
-            if (!ok) vm.repo.toast("Task not complete yet");
-        });
-
-        // Observe assignment live updates
-        vm.repo.slayerLive.observe(getViewLifecycleOwner(), this::renderSlayer);
-
-        // Initial paint
-        renderSlayer(vm.repo.getSlayerAssignment());
     }
+
+    private void renderSlayerCard(@Nullable SlayerAssignment a) {
+        if (a == null) {
+            tvSlayerRegion.setText("Region: —");
+            tvSlayerBody.setText("No task. Tap Pick to choose a region & monster.");
+            btnAbandon.setEnabled(false);
+            btnClaim.setVisibility(View.GONE);
+            prog.setProgress(0);
+            return;
+        }
+
+        // Extract "Region — Monster" if label follows that format
+        String label = (a.label == null ? "" : a.label);
+        String regionLbl = "—";
+        String body = label;
+        int sep = label.indexOf(" — ");
+        if (sep > 0) {
+            regionLbl = label.substring(0, sep);
+            body = label.substring(sep + 3);
+        }
+        tvSlayerRegion.setText("Region: " + regionLbl);
+
+        int done = Math.max(0, a.getDone());
+        int req  = Math.max(1, a.required);
+        tvSlayerBody.setText(body + " — " + done + " / " + req);
+        int pct = (int) Math.round(100.0 * Math.min(done, req) / req);
+        prog.setProgress(pct);
+
+        btnAbandon.setEnabled(!a.isComplete());
+        btnClaim.setVisibility(a.isComplete() ? View.VISIBLE : View.GONE);
+    }
+
+    private void openSlayerPicker() {
+        // Build region list
+        List<GameRepository.SlayerRegion> regions = vm.repo.listSlayerRegions();
+        if (regions.isEmpty()) {
+            vm.repo.toast("No Slayer regions registered yet.");
+            return;
+        }
+
+        View content = LayoutInflater.from(requireContext())
+                .inflate(R.layout.dialog_slayer_pick, null, false);
+        Spinner spRegion  = content.findViewById(R.id.spRegion);
+        Spinner spMonster = content.findViewById(R.id.spMonster);
+
+        // Region adapter
+        List<String> regionLabels = new ArrayList<>();
+        for (GameRepository.SlayerRegion r : regions) regionLabels.add(r.label);
+        ArrayAdapter<String> regionAdapter =
+                new ArrayAdapter<>(requireContext(),
+                        android.R.layout.simple_spinner_item, regionLabels);
+        regionAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spRegion.setAdapter(regionAdapter);
+
+        // Helper to refresh monster spinner when region changes
+        final Runnable refreshMonsters = () -> {
+            int idx = spRegion.getSelectedItemPosition();
+            if (idx < 0 || idx >= regions.size()) return;
+            GameRepository.SlayerRegion r = regions.get(idx);
+            List<String> monsterLabels = new ArrayList<>();
+            for (String mid : r.monsterIds) {
+                Monster m = vm.repo.getMonster(mid);
+                monsterLabels.add(m != null && m.name != null ? m.name : mid);
+            }
+            ArrayAdapter<String> monAdapter =
+                    new ArrayAdapter<>(requireContext(),
+                            android.R.layout.simple_spinner_item, monsterLabels);
+            monAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+            spMonster.setAdapter(monAdapter);
+        };
+
+        // First paint and listener
+        refreshMonsters.run();
+        spRegion.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                refreshMonsters.run();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Choose Slayer Task")
+                .setView(content)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Assign", (d, w) -> {
+                    int rIdx = spRegion.getSelectedItemPosition();
+                    int mIdx = spMonster.getSelectedItemPosition();
+                    if (rIdx < 0 || rIdx >= regions.size()) return;
+                    GameRepository.SlayerRegion r = regions.get(rIdx);
+                    if (mIdx < 0 || mIdx >= r.monsterIds.size()) return;
+                    String monsterId = r.monsterIds.get(mIdx);
+
+                    // Assign & charge via repository (LiveData will update the card)
+                    SlayerAssignment a = vm.repo.rollNewSlayerTask(r.id, monsterId);
+                    if (a == null) {
+                        // Repo already showed a toast on failure
+                        return;
+                    }
+                })
+                .show();
+    }
+
+    /* ------------ tiles (unchanged) ------------ */
 
     private List<Tile> buildTiles() {
         List<Tile> list = new ArrayList<>();
@@ -112,42 +199,7 @@ public class basecampFragment extends Fragment {
         return list;
     }
 
-    private void renderSlayer(@Nullable SlayerAssignment a) {
-        if (a == null) {
-            slayerSubtitle.setText("Region: —");
-            slayerTaskLine.setText("No task. Talk to the Slayer Master to get one!");
-            slayerProgress.setMax(100);
-            slayerProgress.setProgress(0);
-            btnGetTask.setEnabled(true);
-            btnAbandonTask.setEnabled(false);
-            btnClaimTask.setEnabled(false);
-            return;
-        }
-
-        // Region (optional; if you added a.region in your model, prefer that)
-        String region = "Base Region";
-        slayerSubtitle.setText("Region: " + region);
-
-        // Monster display name
-        String monsterName = (a.label != null && !a.label.isEmpty()) ? a.label : a.monsterId;
-        if ((monsterName == null || monsterName.equals(a.monsterId)) && a.monsterId != null) {
-            Monster mDef = vm.repo.getMonster(a.monsterId);
-            if (mDef != null && mDef.name != null) monsterName = mDef.name;
-        }
-
-        int done = a.getDone(); // uses your helper; falls back to progress
-        slayerTaskLine.setText("Kill " + monsterName + " (" + done + " / " + a.required + ")");
-
-        slayerProgress.setMax(Math.max(1, a.required));
-        slayerProgress.setProgress(Math.min(a.required, done));
-
-        boolean complete = a.isComplete();
-        btnGetTask.setEnabled(complete);      // new task once complete (or after abandon)
-        btnAbandonTask.setEnabled(!complete);
-        btnClaimTask.setEnabled(complete);
-    }
-
-    // ----- adapter (unchanged) -----
+    // ----- adapter -----
     private static class Tile {
         final String label; @DrawableRes final int icon; final int destId;
         Tile(String label, int icon, int destId) { this.label = label; this.icon = icon; this.destId = destId; }
@@ -155,15 +207,14 @@ public class basecampFragment extends Fragment {
 
     private static class TilesAdapter extends RecyclerView.Adapter<TilesAdapter.VH> {
         private final List<Tile> data; private final NavController nav;
-
         TilesAdapter(List<Tile> data, NavController nav) { this.data = data; this.nav = nav; }
 
         static class VH extends RecyclerView.ViewHolder {
             final View card; final ImageView icon; final TextView label;
             VH(@NonNull View v) {
                 super(v);
-                card = v.findViewById(R.id.card);
-                icon = v.findViewById(R.id.icon);
+                card  = v.findViewById(R.id.card);
+                icon  = v.findViewById(R.id.icon);
                 label = v.findViewById(R.id.label);
             }
         }

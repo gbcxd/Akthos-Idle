@@ -735,14 +735,17 @@ public class GameRepository {
      * - Grants per-kill Slayer coins (Monster.slayerReward) while task is active
      * - If finished: just toast; actual coin reward is granted when the player claims
      */
+    /** Call this once per monster death. Increments Slayer task if it matches. */
     public void onMonsterKilled(@Nullable String monsterId) {
         if (monsterId == null) return;
         SlayerAssignment a = getSlayerAssignment();
         if (a == null || a.isComplete()) return;
-        if (!monsterId.equals(a.monsterId)) return;
+
+        // compare case-insensitively to be robust
+        if (!monsterId.equalsIgnoreCase(a.monsterId)) return;
 
         // Per-kill Slayer coins (only while on task)
-        Monster m = getMonster(monsterId);
+        Monster m = getMonster(a.monsterId);
         if (m != null && m.slayerReward > 0) {
             addCurrency("slayer", m.slayerReward);
             toast("+" + m.slayerReward + " Slayer");
@@ -755,6 +758,11 @@ public class GameRepository {
         if (a.isComplete()) {
             toast("Task complete — claim your reward!");
         }
+    }
+
+    /** Convenience overload. */
+    public void onMonsterKilled(@Nullable Monster m) {
+        onMonsterKilled(m != null ? m.id : null);
     }
 
     // Simple “combat level” scaler (not OSRS-accurate; good enough for task sizing)
@@ -781,35 +789,76 @@ public class GameRepository {
     /** Roll a task in the default region, optionally forcing replace. */
     @Nullable public SlayerAssignment rollNewSlayerTask(boolean forceReplace) { return rollNewSlayerTask("basecamp", forceReplace); }
 
-    /** Roll a task for a region. Costs Slayer coins from JSON (or fallback). */
+    /** Roll a task for a region. Guard only; real roll handled by the monster overload. */
     @Nullable
     public SlayerAssignment rollNewSlayerTask(String regionId, boolean forceReplace) {
         SlayerAssignment cur = getSlayerAssignment();
+
+        // If a task is finished, don't let the player overwrite it and lose the reward.
+        if (cur != null && cur.isComplete()) {
+            toast("Claim your Slayer reward first.");
+            return cur;
+        }
+
+        // If they already have an active task and didn't request replace, keep it (no charge).
         if (cur != null && !cur.isComplete() && !forceReplace) {
-            toast("Finish or abandon your current task first.");
+            toast("You already have a task. Use Assign to reroll.");
+            return cur;
+        }
+
+        // Delegate to the overload (will apply free-or-reroll cost logic)
+        return rollNewSlayerTask(regionId, (String) null);
+    }
+
+    /** NEW: Roll a task for a region, optionally specifying the monster to slay. Charges roll cost. */
+    @Nullable
+    public SlayerAssignment rollNewSlayerTask(String regionId, @Nullable String monsterId) {
+        SlayerAssignment cur = getSlayerAssignment();
+
+        // Completed task present? Require claiming first to avoid losing rewards.
+        if (cur != null && cur.isComplete()) {
+            toast("Claim your Slayer reward first.");
             return cur;
         }
 
         SlayerRegion reg = slayerRegions.get(regionId);
         if (reg == null || reg.monsterIds == null || reg.monsterIds.isEmpty()) {
             toast("No Slayer monsters in this region yet.");
-            return cur;
+            return slayerLive.getValue();
         }
 
+        // Decide whether this is a reroll (has active, incomplete task) or a fresh assignment
+        boolean isReroll = (cur != null && !cur.isComplete());
+
+        // Charge ONLY on reroll
         int rollCost = effectiveRollCost(regionId);
-        if (!spendCurrency("slayer", rollCost)) {
-            toast("Need " + rollCost + " Slayer coins.");
-            return cur;
+        if (isReroll) {
+            if (!spendCurrency("slayer", rollCost)) {
+                toast("Need " + rollCost + " Slayer coins to reroll.");
+                return cur; // keep current task
+            }
         }
 
-        String monsterId = reg.monsterIds.get(rng.nextInt(reg.monsterIds.size()));
-        Monster m = getMonster(monsterId);
+        // Validate / choose monster
+        String chosen = monsterId;
+        if (chosen == null || !reg.monsterIds.contains(chosen)) {
+            chosen = reg.monsterIds.get(rng.nextInt(reg.monsterIds.size()));
+        }
+
+        Monster m = getMonster(chosen);
         int required = rollKillCountForLevel(getCombatLevel(), regionId);
         int completionBonus = computeCompletionBonus(required, regionId);
-        String label = reg.label + " — " + (m != null && m.name != null ? m.name : monsterId);
+        String label = reg.label + " — " + (m != null && m.name != null ? m.name : chosen);
 
-        assignSlayerTask(regionId, monsterId, required, completionBonus, label);
-        toast("New task rolled (−" + rollCost + " Slayer).");
+        assignSlayerTask(regionId, chosen, required, completionBonus, label);
+
+        // Feedback
+        if (isReroll) {
+            toast("Task rerolled (−" + rollCost + " Slayer).");
+        } else {
+            toast("New task assigned.");
+        }
+
         return slayerLive.getValue();
     }
 
