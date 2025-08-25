@@ -1,0 +1,37 @@
+{
+  "recipes": [
+    {
+      "id": "cook_shrimp",
+      "name": "Cooked Shrimp",
+      "skill": "COOKING",
+      "timeSec": 6,
+      "reqLevel": 1,
+      "xp": 5,
+      "station": "Campfire",
+      "inputs": [{"id": "fish_raw_shrimp", "qty": 1}],
+      "outputs": [{ "id": "cooked_shrimp",  "qty": 1 }]
+    },
+    {
+      "id": "smith_bronze_bar",
+      "name": "Bronze Bar",
+      "skill": "SMITHING",
+      "reqLevel": 1,
+      "timeSec": 4,
+      "xp": 12,
+      "station": "Furnace",
+      "inputs": [{"id": "ore_copper", "qty": 1}, {"id": "ore_tin", "qty": 1}],
+      "outputs": [{"id": "bar_bronze", "qty": 1}]
+    },
+    {
+      "id": "craft_leather_gloves",
+      "name": "Leather Gloves",
+      "skill": "CRAFTING",
+      "reqLevel": 3,
+      "timeSec": 5,
+      "xp": 10,
+      "station": "Workbench",
+      "inputs": [{"id": "leather", "qty": 2}],
+      "outputs": [{"id": "gloves_leather", "qty": 1}]
+    }
+  ]
+}

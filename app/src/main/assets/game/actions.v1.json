@@ -99,12 +99,12 @@
     "exp": 18
   },
   {
-    "id": "fish_shore_shrimp",
+    "id": "fish_raw_shrimp",
     "name": "Shore Shrimp",
     "skill": "FISHING",
     "reqLevel": 1,
     "durationMs": 3500,
-    "outputs": { "raw_shrimp": 1 },
+    "outputs": { "Raw Shrimp": 1 },
     "exp": 6
   },
   {

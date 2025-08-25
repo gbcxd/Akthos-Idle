@@ -17,6 +17,8 @@ import com.example.akthosidle.domain.model.EquipmentSlot;
 import com.example.akthosidle.domain.model.Item;
 import com.example.akthosidle.domain.model.Monster;
 import com.example.akthosidle.domain.model.PlayerCharacter;
+import com.example.akthosidle.domain.model.Recipe;
+import com.example.akthosidle.domain.model.RecipeIO;
 import com.example.akthosidle.domain.model.ShopEntry;
 import com.example.akthosidle.domain.model.SkillId;
 import com.example.akthosidle.domain.model.Stats;
@@ -53,7 +55,11 @@ public class GameRepository {
     private static final String ASSET_ACTIONS  = "game/actions.v1.json";
     private static final String ASSET_MONSTERS = "game/monsters.v1.json";
     private static final String ASSET_SHOP     = "game/shop.v1.json";
-    private static final String ASSET_SLAYER   = "game/slayer.v1.json"; // NEW
+    private static final String ASSET_SLAYER   = "game/slayer.v1.json";
+
+    private static final String ASSET_RECIPES = "game/recipes.v1.json";
+
+    private final java.util.Map<String, Recipe> recipes = new java.util.HashMap<>();
 
     // Slayer fallback values if JSON is missing
     private static final int    SLAYER_ROLL_COST_FALLBACK        = 5;
@@ -125,7 +131,8 @@ public class GameRepository {
         loadItemsFromAssets();
         loadMonstersFromAssets();
         loadActionsFromAssets();
-        loadSlayerFromAssets();     // NEW (reads assets/game/slayer.v1.json)
+        loadSlayerFromAssets();
+        loadRecipesFromAssets();
         loadShopFromAssets();
     }
 
@@ -227,6 +234,168 @@ public class GameRepository {
             if (list != null) shop.addAll(list);
         } catch (Exception ignored) {}
     }
+
+    /* ============================
+     * Recipes registry + JSON config
+     * ============================ */
+    private void loadRecipesFromAssets() {
+        if (!recipes.isEmpty()) return;
+        try (InputStream is = app.getAssets().open(ASSET_RECIPES)) {
+            String json = readStream(is);
+            org.json.JSONObject root = new org.json.JSONObject(json);
+            org.json.JSONArray arr = root.optJSONArray("recipes");
+            if (arr != null) {
+                com.google.gson.reflect.TypeToken<java.util.List<Recipe>> tt =
+                        new com.google.gson.reflect.TypeToken<java.util.List<Recipe>>() {};
+                java.util.List<Recipe> list = new Gson().fromJson(arr.toString(), tt.getType());
+                if (list != null) {
+                    for (Recipe r : list) if (r != null && r.id != null) recipes.put(r.id, r);
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Nullable public Recipe getRecipe(String id) { return recipes.get(id); }
+
+    public java.util.List<Recipe> getRecipesBySkill(SkillId skill) {
+        java.util.List<Recipe> out = new java.util.ArrayList<>();
+        for (Recipe r : recipes.values()) if (r != null && r.skill == skill) out.add(r);
+        return out;
+    }
+
+    private int countInBag(String itemId) {
+        PlayerCharacter pc = loadOrCreatePlayer();
+        return pc.bag.getOrDefault(itemId, 0);
+    }
+
+    // Map recipe ingredient ids to actual bag ids (handles legacy/raw names)
+    private String resolveIngredientId(String id) {
+        if (id == null) return null;
+        PlayerCharacter pc = loadOrCreatePlayer();
+        if ("raw_shrimp".equalsIgnoreCase(id)
+                && !pc.bag.containsKey(id)
+                && pc.bag.containsKey("fish_raw_shrimp")) {
+            return "fish_raw_shrimp";
+        }
+        return id;
+    }
+
+    public boolean canCraft(String recipeId, int times) {
+        Recipe r = getRecipe(recipeId);
+        if (r == null || times <= 0) return false;
+        int lvl = skillLevel(r.skill);
+        if (lvl < Math.max(1, r.reqLevel)) return false;
+
+        if (r.inputs != null) {
+            PlayerCharacter pc = loadOrCreatePlayer();
+            for (RecipeIO in : r.inputs) {
+                if (in == null || in.id == null || in.qty <= 0) continue;
+                String needId = resolveIngredientId(in.id);
+                int have = pc.bag.getOrDefault(needId, 0);
+                if (have < in.qty * times) return false;
+            }
+        }
+        return true;
+    }
+
+
+    public boolean craft(String recipeId, int times) {
+        Recipe r = getRecipe(recipeId);
+        if (r == null || times <= 0) { toast("Invalid recipe"); return false; }
+        if (!canCraft(recipeId, times)) { toast("Missing materials or level"); return false; }
+
+        PlayerCharacter pc = loadOrCreatePlayer();
+
+        // consume inputs
+        if (r.inputs != null) {
+            for (RecipeIO in : r.inputs) {
+                if (in == null || in.id == null || in.qty <= 0) continue;
+                String needId = resolveIngredientId(in.id);
+                int need = in.qty * times;
+                int have = pc.bag.getOrDefault(needId, 0);
+                if (have < need) { toast("Missing materials"); return false; }
+            }
+            for (RecipeIO in : r.inputs) {
+                if (in == null || in.id == null || in.qty <= 0) continue;
+                String needId = resolveIngredientId(in.id);
+                int need = in.qty * times;
+                int have = pc.bag.getOrDefault(needId, 0);
+                pc.bag.put(needId, have - need);
+                if (pc.bag.get(needId) != null && pc.bag.get(needId) <= 0) pc.bag.remove(needId);
+            }
+        }
+
+        // outputs
+        if (r.outputs != null) {
+            for (RecipeIO out : r.outputs) {
+                if (out == null || out.id == null || out.qty <= 0) continue;
+                pc.addItem(out.id, out.qty * times);
+            }
+        }
+
+        // XP
+        if (r.xp > 0 && r.skill != null) addSkillExp(r.skill, r.xp * times);
+
+        save();
+        toast("Crafted ×" + times + " " + (r.name != null ? r.name : r.id));
+        return true;
+    }
+
+
+    public boolean craftOnce(String id) {
+        if (id == null || id.isEmpty()) return false;
+        Recipe r = getRecipe(id);
+        if (r == null) { toast("Unknown recipe"); return false; }
+
+        int level = skillLevel(r.skill);
+        if (level < Math.max(1, r.reqLevel)) {
+            toast((r.name != null ? r.name : r.id) + " needs Lv " + r.reqLevel);
+            return false;
+        }
+
+        PlayerCharacter pc = loadOrCreatePlayer();
+
+        // check inputs
+        if (r.inputs == null || r.inputs.isEmpty()) { toast("Recipe has no inputs"); return false; }
+        for (RecipeIO in : r.inputs) {
+            if (in == null || in.id == null || in.qty <= 0) continue;
+            String needId = resolveIngredientId(in.id);
+            int have = pc.bag.getOrDefault(needId, 0);
+            if (have < in.qty) {
+                toast("Need " + itemName(needId) + " ×" + in.qty);
+                return false;
+            }
+        }
+
+        // consume inputs
+        for (RecipeIO in : r.inputs) {
+            if (in == null || in.id == null || in.qty <= 0) continue;
+            String needId = resolveIngredientId(in.id);
+            int have = pc.bag.getOrDefault(needId, 0);
+            pc.bag.put(needId, have - in.qty);
+            if (pc.bag.get(needId) != null && pc.bag.get(needId) <= 0) pc.bag.remove(needId);
+        }
+
+        // grant outputs
+        String toastLabel = (r.name != null ? r.name : r.id);
+        int totalOut = 0;
+        if (r.outputs != null) {
+            for (RecipeIO out : r.outputs) {
+                if (out == null || out.id == null || out.qty <= 0) continue;
+                pc.addItem(out.id, out.qty);
+                totalOut += out.qty;
+                toastLabel = itemName(out.id);
+            }
+        }
+
+        if (r.xp > 0 && r.skill != null) addSkillExp(r.skill, r.xp);
+        save();
+
+        if (totalOut > 0) toast("Cooked " + toastLabel + " ×" + totalOut);
+        else toast("Crafted " + (r.name != null ? r.name : r.id));
+        return true;
+    }
+
 
     /* ============================
      * Slayer regions registry + JSON config
@@ -1471,6 +1640,18 @@ public class GameRepository {
         return bestUnlockedFor(skill);
     }
 
+    public String normalizeItemIdForBag(String id) {
+        // same logic you used in craftOnce()
+        if (id == null) return null;
+        PlayerCharacter pc = loadOrCreatePlayer();
+        if ("raw_shrimp".equalsIgnoreCase(id)
+                && !pc.bag.containsKey(id)
+                && pc.bag.containsKey("fish_raw_shrimp")) {
+            return "fish_raw_shrimp";
+        }
+        return id;
+    }
+
     /* ============================
      * Utils
      * ============================ */
@@ -1542,4 +1723,6 @@ public class GameRepository {
         save();
         toast("Granted " + qty + "× " + itemName(itemId));
     }
+
+
 }

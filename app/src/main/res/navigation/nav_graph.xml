@@ -82,7 +82,7 @@
     <fragment
         android:id="@+id/bankFragment"
         android:name="com.example.akthosidle.ui.stashFragment"
-        android:label="Bank"
+        android:label="Stash"
         tools:layout="@layout/fragment_stash" />
 
     <fragment
@@ -94,7 +94,7 @@
     <!-- Options (settings/backup) -->
     <fragment
         android:id="@+id/optionsFragment"
-        android:name="com.example.akthosidle.ui.OptionsFragment"
+        android:name="com.example.akthosidle.ui.optionsFragment"
         android:label="Options"
         tools:layout="@layout/fragment_options" />
 
@@ -102,6 +102,13 @@
     <fragment
         android:id="@+id/aboutFragment"
         android:name="com.example.akthosidle.ui.aboutFragment"
+        android:label="About"
+        tools:layout="@layout/fragment_about" />
+
+    <!-- Cooking -->
+    <fragment
+        android:id="@+id/cookingFragment"
+        android:name="com.example.akthosidle.ui.cookingFragment"
         android:label="About"
         tools:layout="@layout/fragment_about" />
 </navigation>

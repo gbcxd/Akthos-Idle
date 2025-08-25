@@ -10,6 +10,7 @@
     <!-- Slayer Master card -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/cardSlayer"
+        android:visibility="gone"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         app:cardUseCompatPadding="true"

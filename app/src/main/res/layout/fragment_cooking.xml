@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:padding="16dp"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/tvCookingTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Cooking"
+        android:textStyle="bold"
+        android:textSize="20sp"
+        android:paddingBottom="8dp"/>
+
+    <TextView
+        android:id="@+id/tvCookingSummary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Loading…"
+        android:paddingBottom="12dp"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerCooking"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:padding="12dp"
+        tools:listitem="@layout/item_cook_recipe" />
+
+    <Button
+        android:id="@+id/btnCookAll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Cook All" />
+
+    <!-- Keep this simple screen lean; you can add a RecyclerView later if you want per-recipe controls -->
+
+</LinearLayout>

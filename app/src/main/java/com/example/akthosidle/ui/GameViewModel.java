@@ -17,6 +17,8 @@ import com.example.akthosidle.engine.CombatEngine;
 import com.example.akthosidle.engine.ActionEngine;
 import com.example.akthosidle.domain.model.Action;
 
+import com.example.akthosidle.domain.model.Recipe;
+
 import java.util.List;
 
 public class GameViewModel extends AndroidViewModel {
@@ -93,6 +95,21 @@ public class GameViewModel extends AndroidViewModel {
         if (a.skill != null) repo.startGathering(a.skill);
         gatherEngine.startLoop(a);
     }
+
+    // ===== Recipe =====
+    public java.util.List<Recipe> getRecipesBySkill(SkillId skill) {
+        return repo.getRecipesBySkill(skill);
+    }
+
+    public boolean canCraft(String recipeId, int times) {
+        return repo.canCraft(recipeId, times);
+    }
+
+    public boolean craft(String recipeId, int times) {
+        return repo.craft(recipeId, times);
+    }
+
+
     public void stopGather() {
         gatherEngine.stop();
         repo.stopGathering();

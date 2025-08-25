@@ -38,6 +38,7 @@ public class basecampFragment extends Fragment {
     private GameViewModel vm;
 
     // Slayer card views
+    private View slayerCard; // container to hide/show
     private TextView tvSlayerTitle, tvSlayerRegion, tvSlayerBody;
     private Button btnPick, btnAbandon, btnClaim;
     private ProgressBar prog;
@@ -56,6 +57,7 @@ public class basecampFragment extends Fragment {
         vm = new ViewModelProvider(requireActivity()).get(GameViewModel.class);
 
         // ---- Slayer card ----
+        slayerCard     = v.findViewById(R.id.cardSlayer); // make sure your XML uses this id
         tvSlayerTitle  = v.findViewById(R.id.tvSlayerTitle);
         tvSlayerRegion = v.findViewById(R.id.tvSlayerRegion);
         tvSlayerBody   = v.findViewById(R.id.tvSlayerBody);
@@ -78,20 +80,20 @@ public class basecampFragment extends Fragment {
         vm.repo.slayerLive.observe(getViewLifecycleOwner(), this::renderSlayerCard);
         renderSlayerCard(vm.repo.getSlayerAssignment()); // initial paint
 
-        // ---- Tiles grid (unchanged) ----
+        // ---- Tiles grid ----
         RecyclerView rv = v.findViewById(R.id.recyclerBasecamp);
         rv.setLayoutManager(new GridLayoutManager(requireContext(), 3));
         rv.setAdapter(new TilesAdapter(buildTiles(), NavHostFragment.findNavController(this)));
     }
 
     private void renderSlayerCard(@Nullable SlayerAssignment a) {
+        // Hide whole card if there is no current assignment
         if (a == null) {
-            tvSlayerRegion.setText("Region: —");
-            tvSlayerBody.setText("No task. Tap Pick to choose a region & monster.");
-            btnAbandon.setEnabled(false);
-            btnClaim.setVisibility(View.GONE);
-            prog.setProgress(0);
+            if (slayerCard != null) slayerCard.setVisibility(View.GONE);
             return;
+        }
+        if (slayerCard != null && slayerCard.getVisibility() != View.VISIBLE) {
+            slayerCard.setVisibility(View.VISIBLE);
         }
 
         // Extract "Region — Monster" if label follows that format
@@ -175,17 +177,14 @@ public class basecampFragment extends Fragment {
                     if (mIdx < 0 || mIdx >= r.monsterIds.size()) return;
                     String monsterId = r.monsterIds.get(mIdx);
 
-                    // Assign & charge via repository (LiveData will update the card)
                     SlayerAssignment a = vm.repo.rollNewSlayerTask(r.id, monsterId);
-                    if (a == null) {
-                        // Repo already showed a toast on failure
-                        return;
-                    }
+                    if (a == null) return; // repo already toasts on failure
+                    // UI refreshes via slayerLive observer -> card becomes visible.
                 })
                 .show();
     }
 
-    /* ------------ tiles (unchanged) ------------ */
+    /* ------------ tiles ------------ */
 
     private List<Tile> buildTiles() {
         List<Tile> list = new ArrayList<>();
@@ -194,6 +193,13 @@ public class basecampFragment extends Fragment {
         list.add(new Tile("Achievements", android.R.drawable.ic_menu_myplaces,     R.id.achievementsFragment));
         list.add(new Tile("Bank",         android.R.drawable.ic_menu_slideshow,    R.id.bankFragment));
         list.add(new Tile("Forge",        android.R.drawable.ic_menu_manage,       R.id.forgeFragment));
+
+        // Always-visible tiles:
+        list.add(new Tile("Cooking",      android.R.drawable.ic_menu_edit,         R.id.cookingFragment));
+
+        // NEW: Slayer Master tile that opens the picker dialog directly
+        list.add(new Tile("Slayer Master", android.R.drawable.ic_menu_compass, () -> openSlayerPicker()));
+
         list.add(new Tile("Options",      android.R.drawable.ic_menu_preferences,  R.id.optionsFragment));
         list.add(new Tile("About",        android.R.drawable.ic_menu_info_details, R.id.aboutFragment));
         return list;
@@ -202,7 +208,16 @@ public class basecampFragment extends Fragment {
     // ----- adapter -----
     private static class Tile {
         final String label; @DrawableRes final int icon; final int destId;
-        Tile(String label, int icon, int destId) { this.label = label; this.icon = icon; this.destId = destId; }
+        @Nullable final Runnable onClick; // optional custom action
+
+        // Navigate tile
+        Tile(String label, int icon, int destId) {
+            this.label = label; this.icon = icon; this.destId = destId; this.onClick = null;
+        }
+        // Custom action tile
+        Tile(String label, int icon, Runnable onClick) {
+            this.label = label; this.icon = icon; this.destId = 0; this.onClick = onClick;
+        }
     }
 
     private static class TilesAdapter extends RecyclerView.Adapter<TilesAdapter.VH> {
@@ -229,6 +244,10 @@ public class basecampFragment extends Fragment {
             h.label.setText(t.label);
             h.icon.setImageResource(t.icon);
             h.card.setOnClickListener(v -> {
+                if (t.onClick != null) {
+                    t.onClick.run();
+                    return;
+                }
                 NavDestination node = null;
                 try { node = nav.getGraph().findNode(t.destId); } catch (Exception ignored) {}
                 if (node != null) {
