@@ -270,16 +270,14 @@ public class GameRepository {
     }
 
     // Map recipe ingredient ids to actual bag ids (handles legacy/raw names)
-    private String resolveIngredientId(String id) {
+    /** Map recipe ingredient ids to actual item ids in items.json. */
+    private String resolveItemAlias(@Nullable String id) {
         if (id == null) return null;
-        PlayerCharacter pc = loadOrCreatePlayer();
-        if ("raw_shrimp".equalsIgnoreCase(id)
-                && !pc.bag.containsKey(id)
-                && pc.bag.containsKey("fish_raw_shrimp")) {
-            return "fish_raw_shrimp";
-        }
+        // Recipes say "raw_shrimp", items.json has "fish_raw_shrimp"
+        if ("raw_shrimp".equalsIgnoreCase(id)) return "fish_raw_shrimp";
         return id;
     }
+
 
     public boolean canCraft(String recipeId, int times) {
         Recipe r = getRecipe(recipeId);
@@ -288,19 +286,15 @@ public class GameRepository {
         if (lvl < Math.max(1, r.reqLevel)) return false;
 
         if (r.inputs != null) {
-            PlayerCharacter pc = loadOrCreatePlayer();
             for (RecipeIO in : r.inputs) {
                 if (in == null || in.id == null || in.qty <= 0) continue;
-                String needId = resolveIngredientId(in.id);
-                int have = pc.bag.getOrDefault(needId, 0);
-                if (have < in.qty * times) return false;
+                String needId = resolveItemAlias(in.id);
+                if (countInBag(needId) < in.qty * times) return false;
             }
         }
         return true;
     }
 
-
-    /** One-shot craft (consumes items, gives outputs & XP). Returns success. */
     public boolean craft(String recipeId, int times) {
         Recipe r = getRecipe(recipeId);
         if (r == null || times <= 0) { toast("Invalid recipe"); return false; }
@@ -308,12 +302,11 @@ public class GameRepository {
 
         PlayerCharacter pc = loadOrCreatePlayer();
 
-        // consume inputs
+        // pre-check
         if (r.inputs != null) {
-            // safety pre-check
             for (RecipeIO in : r.inputs) {
                 if (in == null || in.id == null || in.qty <= 0) continue;
-                String needId = canonicalItemId(in.id);
+                String needId = resolveItemAlias(in.id);
                 int need = in.qty * times;
                 int have = pc.bag.getOrDefault(needId, 0);
                 if (have < need) { toast("Missing materials"); return false; }
@@ -321,7 +314,7 @@ public class GameRepository {
             // consume
             for (RecipeIO in : r.inputs) {
                 if (in == null || in.id == null || in.qty <= 0) continue;
-                String needId = canonicalItemId(in.id);
+                String needId = resolveItemAlias(in.id);
                 int need = in.qty * times;
                 int have = pc.bag.getOrDefault(needId, 0);
                 pc.bag.put(needId, have - need);
@@ -338,25 +331,19 @@ public class GameRepository {
         }
 
         // XP
-        if (r.xp > 0 && r.skill != null) {
-            addSkillExp(r.skill, r.xp * times);
-        }
+        if (r.xp > 0 && r.skill != null) addSkillExp(r.skill, r.xp * times);
 
         save();
         toast("Crafted ×" + times + " " + (r.name != null ? r.name : r.id));
         return true;
     }
 
-
-
-    /** Craft exactly one unit (used by Cooking screen). */
     public boolean craftOnce(String id) {
         if (id == null || id.isEmpty()) return false;
-
         Recipe r = getRecipe(id);
         if (r == null) { toast("Unknown recipe"); return false; }
 
-        // Level gate
+        // level gate
         int level = skillLevel(r.skill);
         if (level < Math.max(1, r.reqLevel)) {
             toast((r.name != null ? r.name : r.id) + " requires Lv " + r.reqLevel);
@@ -365,32 +352,27 @@ public class GameRepository {
 
         PlayerCharacter pc = loadOrCreatePlayer();
 
-        // Check inputs
-        if (r.inputs == null || r.inputs.isEmpty()) {
-            toast("Recipe has no inputs"); return false;
-        }
+        // check inputs
+        if (r.inputs == null || r.inputs.isEmpty()) { toast("Recipe has no inputs"); return false; }
         for (RecipeIO in : r.inputs) {
             if (in == null || in.id == null || in.qty <= 0) continue;
-            String needId = canonicalItemId(in.id);
-            int needQty = Math.max(1, in.qty);
+            String needId = resolveItemAlias(in.id);
+            int need = Math.max(1, in.qty);
             int have = pc.bag.getOrDefault(needId, 0);
-            if (have < needQty) {
-                toast("Need " + itemName(needId) + " ×" + needQty);
-                return false;
-            }
+            if (have < need) { toast("Need " + itemName(needId) + " ×" + need); return false; }
         }
 
-        // Consume inputs
+        // consume
         for (RecipeIO in : r.inputs) {
             if (in == null || in.id == null || in.qty <= 0) continue;
-            String needId = canonicalItemId(in.id);
-            int needQty = Math.max(1, in.qty);
+            String needId = resolveItemAlias(in.id);
+            int need = Math.max(1, in.qty);
             int have = pc.bag.getOrDefault(needId, 0);
-            pc.bag.put(needId, Math.max(0, have - needQty));
+            pc.bag.put(needId, Math.max(0, have - need));
             if (pc.bag.get(needId) != null && pc.bag.get(needId) <= 0) pc.bag.remove(needId);
         }
 
-        // Grant outputs
+        // outputs
         int totalOut = 0;
         String toastLabel = (r.name != null ? r.name : r.id);
         if (r.outputs != null) {
@@ -398,7 +380,7 @@ public class GameRepository {
                 if (out == null || out.id == null || out.qty <= 0) continue;
                 pc.addItem(out.id, out.qty);
                 totalOut += out.qty;
-                toastLabel = itemName(out.id); // use real item name if single
+                toastLabel = itemName(out.id); // show actual cooked item
             }
         }
 
@@ -406,9 +388,11 @@ public class GameRepository {
         if (r.xp > 0 && r.skill != null) addSkillExp(r.skill, r.xp);
 
         save();
-        toast((r.skill == SkillId.COOKING ? "Cooked " : "Crafted ") + toastLabel + " ×" + Math.max(1, totalOut));
+        if (totalOut > 0) toast("Cooked " + toastLabel + " ×" + totalOut);
+        else toast("Crafted " + (r.name != null ? r.name : r.id));
         return true;
     }
+
 
 
 

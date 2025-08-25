@@ -111,20 +111,29 @@ public class cookingFragment extends Fragment {
         if (r.inputs != null && !r.inputs.isEmpty()) {
             for (RecipeIO in : r.inputs) {
                 if (in == null || in.id == null) continue;
-                String needId = vm.repo.canonicalItemId(in.id);
+                String needId = in.id;
                 int needQty = Math.max(1, in.qty);
+
+                // allow recipe id "raw_shrimp" to match item "fish_raw_shrimp"
                 int have = bag.getOrDefault(needId, 0);
+                if ("raw_shrimp".equalsIgnoreCase(needId)) {
+                    have += bag.getOrDefault("fish_raw_shrimp", 0);
+                }
+
                 int canMake = have / needQty;
                 maxCraft = Math.min(maxCraft, canMake);
+
                 if (have < needQty) {
-                    row.reasons.add("Need " + vm.repo.itemName(needId) + " ×" + (needQty - have));
+                    String nice = vm.repo.itemName(
+                            "raw_shrimp".equalsIgnoreCase(needId) ? "fish_raw_shrimp" : needId
+                    );
+                    row.reasons.add("Need " + nice + " ×" + needQty);
                 }
             }
         } else {
             maxCraft = 0;
         }
-        row.maxCraftable = (maxCraft == Integer.MAX_VALUE) ? 0 : maxCraft;
-
+        row.maxCraftable = (maxCraft == Integer.MAX_VALUE ? 0 : maxCraft);
         row.craftable = (row.maxCraftable > 0 && row.reasons.isEmpty());
 
         boolean isAuto = r.id.equals(autoRecipeId);
