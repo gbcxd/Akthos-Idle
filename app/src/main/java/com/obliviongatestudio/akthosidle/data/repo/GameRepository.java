@@ -69,7 +69,8 @@ public class GameRepository {
 
     private final Map<String, Recipe> recipes = new HashMap<>();
 
-    private final Map<String, Item> items = new HashMap<>();
+    // Item definitions in-memory
+    public final Map<String, Item> items = new HashMap<>();
 
     // Slayer fallback values if JSON is missing
     private static final int    SLAYER_ROLL_COST_FALLBACK      = 5;
@@ -82,7 +83,6 @@ public class GameRepository {
     private final Gson gson = new Gson();
 
     // Definitions
-    private final ItemRepository itemRepository;
     private final Map<String, Monster> monsters = new HashMap<>();
     private final Map<String, Action> actions = new HashMap<>();
     private final List<ShopEntry> shop = new ArrayList<>();
@@ -137,14 +137,36 @@ public class GameRepository {
     public GameRepository(Context appContext) {
         this.app = appContext.getApplicationContext();
         this.sp = app.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
-        // INITIALIZE ItemRepository:
-        this.itemRepository = new ItemRepository(appContext);
+    }
+
+    /* ============================
+     * HP helpers (single source of truth)
+     * ============================ */
+    private int maxHp(@NonNull PlayerCharacter pc) {
+        return Math.max(1, pc.totalStats(gearStats(pc)).health);
+    }
+
+    private int clampHp(@NonNull PlayerCharacter pc, @Nullable Integer hp) {
+        int m = maxHp(pc);
+        if (hp == null) return m;
+        return Math.max(0, Math.min(m, hp));
+    }
+
+    private int curHp(@NonNull PlayerCharacter pc) {
+        return clampHp(pc, pc.currentHp);
+    }
+
+    private void setHpAndPublish(@NonNull PlayerCharacter pc, int newHp) {
+        pc.currentHp = clampHp(pc, newHp);
+        save();
+        publishHp();
     }
 
     /* =========================================================
      * Load static definitions
      * ========================================================= */
     public void loadDefinitions() {
+        loadItemsFromAssets();
         loadMonstersFromAssets();
         loadActionsFromAssets();
         loadSlayerFromAssets();
@@ -403,6 +425,12 @@ public class GameRepository {
         slayerRegions.put(id, new SlayerRegion(id, label, filtered));
     }
 
+    @Nullable private RegionCfg getRegionCfg(@Nullable String regionId) {
+        if (regionId == null || slayerCfg == null || slayerCfg.regions == null) return null;
+        for (RegionCfg r : slayerCfg.regions) if (r != null && regionId.equals(r.id)) return r;
+        return null;
+    }
+
     @Nullable private SlayerCfg slayerCfg;
     private static class SlayerCfg {
         @Nullable Costs costs;
@@ -448,11 +476,6 @@ public class GameRepository {
         }
     }
 
-    @Nullable private RegionCfg getRegionCfg(@Nullable String regionId) {
-        if (regionId == null || slayerCfg == null || slayerCfg.regions == null) return null;
-        for (RegionCfg r : slayerCfg.regions) if (r != null && regionId.equals(r.id)) return r;
-        return null;
-    }
     private int effectiveRollCost(@Nullable String regionId) {
         RegionCfg r = getRegionCfg(regionId);
         if (r != null && r.costs != null && r.costs.roll != null) return Math.max(0, r.costs.roll);
@@ -460,6 +483,7 @@ public class GameRepository {
             return Math.max(0, slayerCfg.costs.roll);
         return SLAYER_ROLL_COST_FALLBACK;
     }
+
     private int effectiveAbandonCost(@Nullable String regionId) {
         RegionCfg r = getRegionCfg(regionId);
         if (r != null && r.costs != null && r.costs.abandon != null) return Math.max(0, r.costs.abandon);
@@ -467,6 +491,7 @@ public class GameRepository {
             return Math.max(0, slayerCfg.costs.abandon);
         return SLAYER_ABANDON_COST_FALLBACK;
     }
+
     private int computeCompletionBonus(int required, @Nullable String regionId) {
         double perKill = SLAYER_BONUS_PER_KILL_FALLBACK;
         int minBonus = SLAYER_MIN_BONUS_FALLBACK;
@@ -482,6 +507,7 @@ public class GameRepository {
         int byRate = (int) Math.floor(required * Math.max(0.0, perKill));
         return Math.max(minBonus, byRate);
     }
+
     private int rollKillCountForLevel(int combatLevel, @Nullable String regionId) {
         int minBase = 100, maxBase = 150, maxBump = 50; double bumpPerCL = 0.5;
 
@@ -602,10 +628,12 @@ public class GameRepository {
 
                 player.normalizeCurrencies();
 
-                Stats newPlayerGearStats = gearStats(player); // Likely empty for a new player
-                Stats newPlayerTotalStats = player.totalStats(newPlayerGearStats);
-                int newPlayerMaxHp = Math.max(1, newPlayerTotalStats.health);
-                player.setCurrentHp(newPlayerMaxHp);
+                // Fix HP only if invalid; otherwise keep saved HP
+                int maxHpNow = maxHp(player);
+                Integer savedHp = player.currentHp;
+                if (savedHp == null || savedHp <= 0 || savedHp > maxHpNow) {
+                    player.currentHp = maxHpNow;
+                }
 
                 save();
                 publishCurrencies();
@@ -619,15 +647,14 @@ public class GameRepository {
         player = new PlayerCharacter();
         player.normalizeCurrencies();
 
-        // Starter items (kept generous for testing)
+        // Starter items
         addToBag("food_apple", 1000);
         addToBag("pot_basic_combat", 1000);
         addToBag("pot_basic_noncombat", 1000);
         addToBag("syrup_basic", 1000);
 
-        if (player.getCurrentHp == null) {
-            int maxHp = totalStats().health; // Make sure totalStats() is accessible and correct here
-            player.setCurrentHp(maxHp);
+        if (player.currentHp == null) {
+            player.currentHp = maxHp(player);
         }
 
         save();
@@ -656,10 +683,7 @@ public class GameRepository {
     /* ============================
      * Lookups & helpers
      * ============================ */
-    @Nullable
-    public Item getItem(String id) {
-        return itemRepository.getItem(id); // Delegate
-    }
+    @Nullable public Item getItem(String id) { return items.get(id); }
     public @Nullable Monster getMonster(String id) { return monsters.get(id); }
     public @Nullable Action getAction(String id) { return actions.get(id); }
 
@@ -670,7 +694,7 @@ public class GameRepository {
     }
 
     public String itemName(String id) {
-        Item it = getItem(id); // This now uses the corrected getItem()
+        Item it = getItem(id);
         return it != null && it.name != null ? it.name : id;
     }
 
@@ -708,30 +732,6 @@ public class GameRepository {
     private void addToBag(String id, int qty) {
         loadOrCreatePlayer();
         player.bag.put(id, player.bag.getOrDefault(id, 0) + qty);
-    }
-
-    /* ============================
-     * HP helpers (single source of truth)
-     * ============================ */
-    private int maxHp(@NonNull PlayerCharacter pc) {
-        // max HP comes from base + gear
-        return Math.max(1, pc.totalStats(gearStats(pc)).health);
-    }
-
-    private int clampHp(@NonNull PlayerCharacter pc, @Nullable Integer hp) {
-        int m = maxHp(pc);
-        if (hp == null) return m;                 // default to full if unknown
-        return Math.max(0, Math.min(m, hp));      // 0..max
-    }
-
-    private int curHp(@NonNull PlayerCharacter pc) {
-        return clampHp(pc, pc.getCurrentHp());
-    }
-
-    private void setHpAndPublish(@NonNull PlayerCharacter pc, int newHp) {
-        pc.setCurrentHp(clampHp(pc, newHp));
-        save();
-        publishHp();
     }
 
     /* ============================
@@ -1012,48 +1012,29 @@ public class GameRepository {
     }
 
     public void consumeFood(String foodId) {
-        PlayerCharacter pc = loadOrCreatePlayer(); // This is fine
-        Item it = getItem(foodId); // This now comes from ItemRepository
-
-        // Ensure item exists and is food before proceeding
-        if (it == null || it.heal == null || it.heal <= 0) {
-            // Optional: toast("Cannot consume this item or it doesn't heal.")
-            return;
-        }
-
+        PlayerCharacter pc = loadOrCreatePlayer();
         Integer have = pc.bag.get(foodId);
-        if (have == null || have <= 0) {
-            // Optional: toast("You don't have any " + itemName(foodId));
-            return;
-        }
+        if (have == null || have <= 0) return;
 
-        int maxHp = totalStats().health;
-        int cur = (pc.getCurrentHp() == null) ? maxHp : pc.getCurrentHp();
+        Item it = getItem(foodId);
+        if (it == null || !isFood(it) || it.heal == null || it.heal <= 0) return;
 
-        if (cur >= maxHp) {
-            toast("HP already full");
-            // Still consume the food if that's the desired game mechanic,
-            // or return here if food shouldn't be consumed at max HP.
-            // For now, let's assume it's consumed:
+        int before = curHp(pc);
+        int after  = Math.min(maxHp(pc), before + it.heal);
+        int healed = after - before;
+
+        if (healed > 0) {
+            pc.currentHp = after;
+            toast("+" + healed + " HP");
         } else {
-            int currentHpVal = player.getCurrentHp();
-            int newHp = Math.min(maxHp, currentHpVal + foodItem.heal);
-
-            if (newHp != currentHpVal) {
-                currentPlayer.currentHp = newHp;
-                repo.updatePlayerHp(newHp); // This should be triggered by repo.consumeFood internally
-            } else {
-                // This case should ideally be caught by cur >= maxHp above
-                toast("HP already full");
-            }
+            toast("HP already full");
         }
 
         pc.bag.put(foodId, have - 1);
-        if (pc.bag.get(foodId) != null && pc.bag.get(foodId) <= 0) {
-            pc.bag.remove(foodId);
-        }
-        save();      // Saves player character (including new HP and bag state)
-        publishHp(); // Notifies LiveData observers of HP change
+        if (pc.bag.get(foodId) != null && pc.bag.get(foodId) <= 0) pc.bag.remove(foodId);
+
+        save();
+        publishHp();
     }
 
     public List<InventoryItem> getPotions(boolean combatOnly, boolean nonCombatOnly) {
@@ -1081,13 +1062,10 @@ public class GameRepository {
         if (it == null || !isPotion(it)) return;
 
         if (it.heal != null && it.heal > 0) {
-            int maxHp = totalStats().health; // Assuming totalStats() is available and returns Stats
-            // This line is correct for Integer:
-            int cur = (pc.getCurrentHp() == null) ? maxHp : pc.currentHp;
-            int newHp = Math.min(maxHp, Math.max(0, cur) + it.heal);
-            int healed = newHp - cur;
-            // This line directly modifies the field. If currentHp is private, you need a setter.
-            pc.currentHp = newHp;
+            int before = curHp(pc);
+            int after  = Math.min(maxHp(pc), Math.max(0, before) + it.heal);
+            int healed = after - before;
+            pc.currentHp = after;
             toast(healed > 0 ? ("+" + healed + " HP") : "HP already full");
         }
         pc.bag.put(potionId, have - 1);
@@ -1114,11 +1092,10 @@ public class GameRepository {
         boolean didSomething = false;
 
         if (syrup != null && syrup.heal != null && syrup.heal > 0) {
-            int maxHp = totalStats().health;
-            int cur = pc.getCurrentHp() == null ? maxHp : pc.currentHp;
-            int newHp = Math.min(maxHp, Math.max(0, cur) + syrup.heal);
-            int healed = newHp - cur;
-            pc.currentHp = newHp;
+            int before = curHp(pc);
+            int after  = Math.min(maxHp(pc), Math.max(0, before) + syrup.heal);
+            int healed = after - before;
+            pc.currentHp = after;
             didSomething = true;
             toast(healed > 0 ? ("+" + healed + " HP") : "HP already full");
         } else {
@@ -1157,9 +1134,8 @@ public class GameRepository {
         String prev = pc.equipment.put(slot, itemId);
         if (prev != null) pc.addItem(prev, 1);
 
-        int maxHp = totalStats().health;
-        if (pc.getCurrentHp() == null) pc.getCurrentHp = maxHp;
-        if (pc.getCurrentHp() > maxHp) pc.getCurrentHp = maxHp;
+        int m = maxHp(pc);
+        pc.currentHp = (pc.currentHp == null) ? m : Math.min(pc.currentHp, m);
 
         save();
         publishHp();
@@ -1175,8 +1151,8 @@ public class GameRepository {
 
         pc.addItem(prev, 1);
 
-        int maxHp = totalStats().health;
-        if (pc.currentHp != null && pc.currentHp > maxHp) pc.currentHp = maxHp;
+        int m = maxHp(pc);
+        pc.currentHp = (pc.currentHp == null) ? m : Math.min(pc.currentHp, m);
 
         save();
         publishHp();
@@ -1490,9 +1466,8 @@ public class GameRepository {
     }
     private void publishHp() {
         PlayerCharacter pc = loadOrCreatePlayer();
-        playerHpLive.postValue(pc.getCurrentHp()); // CRITICAL: Updates the LiveData
+        playerHpLive.postValue(pc.currentHp);
     }
-
     public MutableLiveData<Map<String, Long>> currenciesLive() { return currencyLive; }
 
     /* ============================
@@ -1822,4 +1797,3 @@ public class GameRepository {
         });
     }
 }
-

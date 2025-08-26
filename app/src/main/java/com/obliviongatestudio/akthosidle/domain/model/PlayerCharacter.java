@@ -9,7 +9,7 @@ import java.util.Map;
 public class PlayerCharacter {
     // --- persisted fields ---
 
-    public int currentHp;
+    public Integer currentHp;
     public Map<String, Integer> bag = new HashMap<>();
     public EnumMap<EquipmentSlot, String> equipment = new EnumMap<>(EquipmentSlot.class);
 
