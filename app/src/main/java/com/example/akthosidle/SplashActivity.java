@@ -3,6 +3,8 @@ package com.example.akthosidle;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -16,6 +18,9 @@ import androidx.core.splashscreen.SplashScreen;
 
 import com.example.akthosidle.data.repo.GameRepository;
 import com.example.akthosidle.data.seed.GameSeedImporter;
+import com.example.akthosidle.ui.auth.CreateAccountFragment;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
 public class SplashActivity extends AppCompatActivity {
 
@@ -24,13 +29,17 @@ public class SplashActivity extends AppCompatActivity {
 
     private GameRepository repo;
 
+    private com.google.firebase.auth.FirebaseAuth mAuth;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         // Android 12+ system splash (we immediately draw our own UI afterwards)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             SplashScreen splash = SplashScreen.installSplashScreen(this);
-            splash.setKeepOnScreenCondition(() -> false);
+            splash.setKeepOnScreenCondition(() -> true); // Keep splash until we manually navigate
         }
+
+        mAuth = FirebaseAuth.getInstance();
 
         GameRepository repo = new GameRepository(getApplicationContext());
 
@@ -47,14 +56,14 @@ public class SplashActivity extends AppCompatActivity {
         updateProgress(0);
 
         // Kick off fake loading on a background thread
-        new Thread(this::runLoadingSequence, "SplashLoader").start();
+        new Thread(this::runLoadingSequenceAndCheckAuth, "SplashLoader").start();
     }
 
     // -------------------------
     // Fake loading sequence
     // -------------------------
     @WorkerThread
-    private void runLoadingSequence() {
+    private void runLoadingSequenceAndCheckAuth() {
         try {
             // Total ~3 seconds; tweak sleeps to taste
             step(10,  () -> { repo = new GameRepository(getApplicationContext()); sleep(300); });
@@ -75,6 +84,20 @@ public class SplashActivity extends AppCompatActivity {
                 finish();
             });
         }
+
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (currentUser != null) {
+                // User is signed in
+                startActivity(new Intent(SplashActivity.this, MainActivity.class));
+            } else {
+                // No user is signed in
+                startActivity(new Intent(SplashActivity.this, CreateAccountFragment.class));
+                // Or LoginActivity.class if you have that as the entry point for auth
+            }
+            finish(); // Important: Finish SplashActivity
+        });
     }
 
     @WorkerThread

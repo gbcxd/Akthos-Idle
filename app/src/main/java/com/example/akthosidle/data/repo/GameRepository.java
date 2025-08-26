@@ -271,11 +271,11 @@ public class GameRepository {
 
     // Map recipe ingredient ids to actual bag ids (handles legacy/raw names)
     /** Map recipe ingredient ids to actual item ids in items.json. */
-    private String resolveItemAlias(@Nullable String id) {
-        if (id == null) return null;
-        // Recipes say "raw_shrimp", items.json has "fish_raw_shrimp"
+    private String resolveItemAlias(String id) {
         if ("raw_shrimp".equalsIgnoreCase(id)) return "fish_raw_shrimp";
-        return id;
+        if ("raw_crayfish".equalsIgnoreCase(id)) return "fish_raw_crayfish";
+        // ... other aliases
+        return id; // Default: no alias, id is already canonical
     }
 
 
@@ -1290,12 +1290,24 @@ public class GameRepository {
 
     private static @Nullable String canonicalItemId(@Nullable String id) {
         if (id == null) return null;
-        String s = id.toLowerCase();
-        // All these should count as the same thing:
+        String s = id.toLowerCase(); // Convert to lowercase for consistent comparison and output
+
+        // Aliases that should map to "fish_raw_shrimp"
         if (s.equals("raw_shrimp") || s.equals("shore_shrimp") || s.equals("shrimp_raw")) {
             return "fish_raw_shrimp";
         }
-        return id;
+
+        // If it's already the canonical form (or another item that doesn't have specific aliases)
+        // ensure we return the consistently cased version.
+        // For example, if "fish_raw_shrimp" is passed in, s becomes "fish_raw_shrimp",
+        // it doesn't match the if, and then it should return "fish_raw_shrimp" (lowercase s).
+        if (s.equals("fish_raw_shrimp")) { // Explicitly handle the canonical form itself
+            return "fish_raw_shrimp";
+        }
+
+        // For all other items that don't have specific aliases,
+        // return their lowercased version as the canonical ID.
+        return s;
     }
 
     /* ============================

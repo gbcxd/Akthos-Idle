@@ -104,17 +104,8 @@
     "skill": "FISHING",
     "reqLevel": 1,
     "durationMs": 3500,
-    "outputs": { "Raw Shrimp": 1 },
+    "outputs": { "fish_raw_shrimp": 1 },
     "exp": 6
-  },
-  {
-    "id": "fish_net_shrimp",
-    "name": "Net Shrimp",
-    "skill": "FISHING",
-    "reqLevel": 3,
-    "durationMs": 3300,
-    "outputs": { "raw_shrimp": 2 },
-    "exp": 8
   },
   {
     "id": "fish_sardine",
