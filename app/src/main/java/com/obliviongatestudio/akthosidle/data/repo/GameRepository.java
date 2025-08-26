@@ -734,6 +734,29 @@ public class GameRepository {
         player.bag.put(id, player.bag.getOrDefault(id, 0) + qty);
     }
 
+    public void updatePlayerHp(int newHp) {
+        PlayerCharacter pc = loadOrCreatePlayer();
+        setHpAndPublish(pc, newHp); // uses the existing clamp + save + publishHp()
+    }
+
+    public void updatePlayerInventory(@NonNull String itemId, int newQuantity) {
+        if (itemId == null) return;
+        PlayerCharacter pc = loadOrCreatePlayer();
+
+        String id = String.valueOf(canonicalItemId(itemId));
+        int prev = pc.bag.getOrDefault(id, 0);
+        int q = Math.max(0, newQuantity);
+
+        if (q == prev) return; // no-op
+
+        if (q == 0) pc.bag.remove(id);
+        else pc.bag.put(id, q);
+
+        save(); // persists + schedules debounced cloud save
+        int delta = q - prev;
+        if (delta != 0) cloudIncrementBag(id, delta); // keep cloud in sync incrementally
+    }
+
     /* ============================
      * Skill helpers (for UI)
      * ============================ */
