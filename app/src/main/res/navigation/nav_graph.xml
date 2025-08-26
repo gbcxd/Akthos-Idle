@@ -8,25 +8,25 @@
     <!-- Core tabs -->
     <fragment
         android:id="@+id/nav_battle"
-        android:name="com.example.akthosidle.ui.BattleFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.BattleFragment"
         android:label="Battle"
         tools:layout="@layout/fragment_battle" />
 
     <fragment
         android:id="@+id/nav_character"
-        android:name="com.example.akthosidle.ui.CharacterFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.CharacterFragment"
         android:label="Character"
         tools:layout="@layout/fragment_character" />
 
     <fragment
         android:id="@+id/nav_inventory"
-        android:name="com.example.akthosidle.ui.InventoryFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.InventoryFragment"
         android:label="Inventory"
         tools:layout="@layout/fragment_inventory" />
 
     <fragment
         android:id="@+id/nav_skills"
-        android:name="com.example.akthosidle.ui.SkillsFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.SkillsFragment"
         android:label="Skills"
         tools:layout="@layout/fragment_skills">
         <action
@@ -36,7 +36,7 @@
 
     <fragment
         android:id="@+id/skillDetailFragment"
-        android:name="com.example.akthosidle.ui.skill.SkillDetailFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.skill.SkillDetailFragment"
         android:label="Skill"
         tools:layout="@layout/fragment_skill_detail">
         <argument
@@ -48,67 +48,67 @@
     <!-- Bottom tab “Settings” actually opens Basecamp -->
     <fragment
         android:id="@+id/nav_settings"
-        android:name="com.example.akthosidle.ui.basecampFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.basecampFragment"
         android:label="Basecamp"
         tools:layout="@layout/fragment_basecamp" />
 
     <!-- Store / Shop -->
     <fragment
         android:id="@+id/shopFragment"
-        android:name="com.example.akthosidle.ui.store.shopFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.store.shopFragment"
         android:label="Shop"
         tools:layout="@layout/fragment_shop" />
 
     <!-- Buy Gold (toolbar + shop) -->
     <fragment
         android:id="@+id/buyGoldFragment"
-        android:name="com.example.akthosidle.ui.store.BuyGoldFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.store.BuyGoldFragment"
         android:label="@string/buy_gold_title"
         tools:layout="@layout/fragment_buy_gold" />
 
     <!-- Basecamp tiles -->
     <fragment
         android:id="@+id/questsFragment"
-        android:name="com.example.akthosidle.ui.questsFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.questsFragment"
         android:label="Quests"
         tools:layout="@layout/fragment_quests" />
 
     <fragment
         android:id="@+id/achievementsFragment"
-        android:name="com.example.akthosidle.ui.achievementsFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.achievementsFragment"
         android:label="Achievements"
         tools:layout="@layout/fragment_achievements" />
 
     <fragment
         android:id="@+id/bankFragment"
-        android:name="com.example.akthosidle.ui.stashFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.stashFragment"
         android:label="Stash"
         tools:layout="@layout/fragment_stash" />
 
     <fragment
         android:id="@+id/forgeFragment"
-        android:name="com.example.akthosidle.ui.forgeFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.forgeFragment"
         android:label="Forge"
         tools:layout="@layout/fragment_forge" />
 
     <!-- Options (settings/backup) -->
     <fragment
         android:id="@+id/optionsFragment"
-        android:name="com.example.akthosidle.ui.optionsFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.optionsFragment"
         android:label="Options"
         tools:layout="@layout/fragment_options" />
 
     <!-- About -->
     <fragment
         android:id="@+id/aboutFragment"
-        android:name="com.example.akthosidle.ui.aboutFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.aboutFragment"
         android:label="About"
         tools:layout="@layout/fragment_about" />
 
     <!-- Cooking -->
     <fragment
         android:id="@+id/cookingFragment"
-        android:name="com.example.akthosidle.ui.cookingFragment"
+        android:name="com.obliviongatestudio.akthosidle.ui.cookingFragment"
         android:label="About"
         tools:layout="@layout/fragment_about" />
 </navigation>

@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1005062643296",
+    "project_id": "akthos-idle",
+    "storage_bucket": "akthos-idle.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1005062643296:android:305c43f08c900a800d6d05",
+        "android_client_info": {
+          "package_name": "com.obliviongatestudio.akthosidle"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1005062643296-dvus5f91sjfitjkl1cdakmr7pm635mqj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBFaNWC2yzDdu4yL63R2AAFxAqLKkeWtj8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1005062643296-dvus5f91sjfitjkl1cdakmr7pm635mqj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

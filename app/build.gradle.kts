@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.akthosidle"
+    namespace = "com.obliviongatestudio.akthosidle"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.akthosidle"
+        applicationId = "com.obliviongatestudio.akthosidle"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -24,6 +24,7 @@ android {
 
     buildFeatures {
         viewBinding = true
+        dataBinding = true
         buildConfig = true
     }
 
