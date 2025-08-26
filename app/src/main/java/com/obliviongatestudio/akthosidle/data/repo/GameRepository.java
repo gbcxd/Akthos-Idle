@@ -739,22 +739,38 @@ public class GameRepository {
         setHpAndPublish(pc, newHp); // uses the existing clamp + save + publishHp()
     }
 
-    public void updatePlayerInventory(@NonNull String itemId, int newQuantity) {
-        if (itemId == null) return;
+    public void updatePlayerInventory(@NonNull Map<String, Integer> updates) {
+        if (updates == null || updates.isEmpty()) return;
         PlayerCharacter pc = loadOrCreatePlayer();
 
-        String id = String.valueOf(canonicalItemId(itemId));
-        int prev = pc.bag.getOrDefault(id, 0);
-        int q = Math.max(0, newQuantity);
+        // Track deltas so we can mirror to cloud incrementally
+        Map<String, Integer> deltas = new HashMap<>();
 
-        if (q == prev) return; // no-op
+        for (Map.Entry<String, Integer> e : updates.entrySet()) {
+            String rawId = e.getKey();
+            if (rawId == null) continue;
 
-        if (q == 0) pc.bag.remove(id);
-        else pc.bag.put(id, q);
+            String id = String.valueOf(canonicalItemId(rawId));
+            int prev = pc.bag.getOrDefault(id, 0);
+            int q = Math.max(0, e.getValue() == null ? 0 : e.getValue());
 
-        save(); // persists + schedules debounced cloud save
-        int delta = q - prev;
-        if (delta != 0) cloudIncrementBag(id, delta); // keep cloud in sync incrementally
+            if (q == prev) continue; // no change
+
+            if (q == 0) pc.bag.remove(id);
+            else pc.bag.put(id, q);
+
+            deltas.put(id, q - prev);
+        }
+
+        if (deltas.isEmpty()) return; // nothing changed
+
+        save(); // persist all changes at once
+
+        // Mirror each change to Firestore incrementally
+        for (Map.Entry<String, Integer> d : deltas.entrySet()) {
+            int delta = d.getValue();
+            if (delta != 0) cloudIncrementBag(d.getKey(), delta);
+        }
     }
 
     /* ============================
