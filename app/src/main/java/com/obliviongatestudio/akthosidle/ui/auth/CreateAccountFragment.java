@@ -19,16 +19,19 @@ import androidx.fragment.app.Fragment;
 import androidx.navigation.NavController;
 import androidx.navigation.fragment.NavHostFragment;
 
-import com.obliviongatestudio.akthosidle.MainActivity;
-import com.obliviongatestudio.akthosidle.R;
 import com.google.android.gms.tasks.Task;
 import com.google.android.material.textfield.TextInputLayout;
-import com.google.firebase.Timestamp;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.obliviongatestudio.akthosidle.MainActivity;
+import com.obliviongatestudio.akthosidle.R;
 
+import com.google.firebase.firestore.SetOptions;
+import com.google.firebase.firestore.FieldValue;
+
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -157,34 +160,86 @@ public class CreateAccountFragment extends Fragment {
     }
 
     private void saveCharacterToFirestore(String uid, String characterName, String email) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("userId", uid);
-        data.put("characterName", characterName);
-        data.put("email", email);
-        data.put("createdAt", Timestamp.now());
+        Map<String, Object> data = defaultCharacter(uid, characterName, email);
 
-        // Use UID as document id so it's 1:1 with the auth user
-        db.collection("playerCharacters").document(uid)
-                .set(data)
+        FirebaseFirestore.getInstance()
+                .collection("playerCharacters").document(uid)
+                .set(data, SetOptions.merge())   // merge = idempotent on retries
                 .addOnSuccessListener(unused -> {
-                    if (!isAdded()) return;
-                    Log.d("CreateAccount", "Character saved for UID: " + uid);
-                    setUiBusy(false);
-                    toast("Account created.");
-
-                    // Go to the game and clear the auth stack
-                    Intent intent = new Intent(requireContext(), MainActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(intent);
+                    Toast.makeText(requireContext(), "Account created.", Toast.LENGTH_SHORT).show();
+                    Intent i = new Intent(requireContext(), MainActivity.class);
+                    i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(i);
                     requireActivity().finish();
                 })
                 .addOnFailureListener(e -> {
-                    if (!isAdded()) return;
-                    Log.w("CreateAccount", "Failed saving character", e);
-                    setUiBusy(false);
-                    // Optionally: delete the auth user to keep state consistent
-                    toast("Account created, but failed to save character data: " + e.getMessage());
+                    Toast.makeText(requireContext(), "Saved auth but failed character: " + e.getMessage(), Toast.LENGTH_LONG).show();
                 });
+    }
+
+    private Map<String, Object> defaultCharacter(String uid, String name, String email) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("userId", uid);
+        m.put("characterName", name);
+        m.put("email", email);
+        m.put("createdAt", FieldValue.serverTimestamp());
+
+        // currencies
+        Map<String, Object> currencies = new HashMap<>();
+        currencies.put("silver", 0L);
+        currencies.put("gold",   0L);
+        currencies.put("slayer", 0L);
+        m.put("currencies", currencies);
+
+        // core stats
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("attack", 1);
+        stats.put("strength", 1);
+        stats.put("defense", 1);
+        stats.put("archery", 1);
+        stats.put("health", 10);
+        stats.put("critRate", 5);     // %
+        stats.put("critDamage", 150); // %
+        m.put("stats", stats);
+
+        // skills (example set — add the ones you use)
+        Map<String, Object> skills = new HashMap<>();
+        skills.put("ATTACK", skill(1, 0));
+        skills.put("STRENGTH", skill(1, 0));
+        skills.put("DEFENSE", skill(1, 0));
+        skills.put("ARCHERY", skill(1, 0));
+        skills.put("FISHING", skill(1, 0));
+        skills.put("MINING",  skill(1, 0));
+        skills.put("COOKING", skill(1, 0));
+        // ... add the rest you track
+        m.put("skills", skills);
+
+        // equipment slots
+        Map<String, Object> equipment = new HashMap<>();
+        equipment.put("helmet", null);
+        equipment.put("cape", null);
+        equipment.put("mainWeapon", null);
+        equipment.put("secondHand", null);
+        equipment.put("armor", null);
+        equipment.put("gloves", null);
+        equipment.put("pants", null);
+        equipment.put("boots", null);
+        equipment.put("necklace", null);
+        equipment.put("ring", null);
+        equipment.put("tool", null);
+        equipment.put("blessing", null);
+        m.put("equipment", equipment);
+
+        // start with empty inventory list
+        m.put("inventory", new ArrayList<Map<String, Object>>());
+
+        return m;
+    }
+    private Map<String, Object> skill(int level, long xp) {
+        Map<String, Object> s = new HashMap<>();
+        s.put("level", level);
+        s.put("xp", xp);
+        return s;
     }
 
     // --- helpers ---

@@ -5,8 +5,10 @@ import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Log;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.lifecycle.MutableLiveData;
 
@@ -23,6 +25,14 @@ import com.obliviongatestudio.akthosidle.domain.model.ShopEntry;
 import com.obliviongatestudio.akthosidle.domain.model.SkillId;
 import com.obliviongatestudio.akthosidle.domain.model.Stats;
 import com.obliviongatestudio.akthosidle.domain.model.SlayerAssignment;
+import com.google.firebase.Timestamp;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.FieldValue;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.SetOptions;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -40,32 +50,30 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-/** Central game repository (definitions + save + live state). */
+/** Central game repository (definitions + save + live state + Firestore sync). */
 public class GameRepository {
 
     private static final String SP_NAME = "akthos_idle_save";
     private static final String KEY_PLAYER = "player_json";
     private static final String KEY_LAST_SEEN = "last_seen_ms";
-    // persisted “which combat skill should get kill XP”
     private static final String KEY_TRAIN_SKILL = "combat_training_skill";
-    // persisted Slayer assignment (json)
     private static final String KEY_SLAYER_JSON = "slayer_assignment_json";
+    private static final String KEY_LOCAL_UPDATED_AT = "player_updated_at_ms";
 
     private static final String ASSET_ITEMS    = "game/items.v1.json";
     private static final String ASSET_ACTIONS  = "game/actions.v1.json";
     private static final String ASSET_MONSTERS = "game/monsters.v1.json";
     private static final String ASSET_SHOP     = "game/shop.v1.json";
     private static final String ASSET_SLAYER   = "game/slayer.v1.json";
+    private static final String ASSET_RECIPES  = "game/recipes.v1.json";
 
-    private static final String ASSET_RECIPES = "game/recipes.v1.json";
-
-    private final java.util.Map<String, Recipe> recipes = new java.util.HashMap<>();
+    private final Map<String, Recipe> recipes = new HashMap<>();
 
     // Slayer fallback values if JSON is missing
-    private static final int    SLAYER_ROLL_COST_FALLBACK        = 5;
-    private static final int    SLAYER_ABANDON_COST_FALLBACK     = 2;
-    private static final double SLAYER_BONUS_PER_KILL_FALLBACK   = 0.25; // required/4
-    private static final int    SLAYER_MIN_BONUS_FALLBACK        = 10;
+    private static final int    SLAYER_ROLL_COST_FALLBACK      = 5;
+    private static final int    SLAYER_ABANDON_COST_FALLBACK   = 2;
+    private static final double SLAYER_BONUS_PER_KILL_FALLBACK = 0.25; // required/4
+    private static final int    SLAYER_MIN_BONUS_FALLBACK      = 10;
 
     private final Context app;
     private final SharedPreferences sp;
@@ -75,18 +83,15 @@ public class GameRepository {
     public final Map<String, Item> items = new HashMap<>();
     private final Map<String, Monster> monsters = new HashMap<>();
     private final Map<String, Action> actions = new HashMap<>();
-    // Shop definitions
     private final List<ShopEntry> shop = new ArrayList<>();
 
-    // RNG
     private final Random rng = new Random();
 
     // Runtime save
     private PlayerCharacter player;
 
     // Live data
-    public final MutableLiveData<Map<String, Long>> currencyLive =
-            new MutableLiveData<>(new HashMap<>());
+    public final MutableLiveData<Map<String, Long>> currencyLive = new MutableLiveData<>(new HashMap<>());
     public final MutableLiveData<Integer> playerHpLive = new MutableLiveData<>();
 
     // XP/hour tracker
@@ -96,7 +101,7 @@ public class GameRepository {
     public final MutableLiveData<Boolean> gatheringLive = new MutableLiveData<>(false);
     @Nullable private SkillId gatheringSkill = null;
 
-    // Battle state (authoritative flag for FAB visibility, etc.)
+    // Battle state
     public final MutableLiveData<Boolean> battleLive = new MutableLiveData<>(false);
 
     // Slayer state
@@ -119,13 +124,21 @@ public class GameRepository {
         }
     };
 
+    // --- Cloud (Firestore) ---
+    private static final String TAG = "GameRepository";
+    private final FirebaseAuth auth = FirebaseAuth.getInstance();
+    private final FirebaseFirestore fdb = FirebaseFirestore.getInstance();
+    @Nullable private ListenerRegistration cloudListener;
+    private static final long CLOUD_DEBOUNCE_MS = 500L;
+    @Nullable private Runnable cloudSaveRunnable = null;
+
     public GameRepository(Context appContext) {
         this.app = appContext.getApplicationContext();
         this.sp = app.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
     }
 
     /* =========================================================
-     * Load static definitions (items / monsters / actions / slayer / shop).
+     * Load static definitions
      * ========================================================= */
     public void loadDefinitions() {
         loadItemsFromAssets();
@@ -142,9 +155,7 @@ public class GameRepository {
             String json = readStream(is);
             Type t = new TypeToken<List<Action>>() {}.getType();
             List<Action> list = gson.fromJson(json, t);
-            if (list != null) {
-                for (Action a : list) if (a != null && a.id != null) actions.put(a.id, a);
-            }
+            if (list != null) for (Action a : list) if (a != null && a.id != null) actions.put(a.id, a);
         } catch (Exception ignored) {}
     }
 
@@ -172,7 +183,6 @@ public class GameRepository {
                     it.rarity = o.optString("rarity", null);
                     if (o.has("heal")) it.heal = o.optInt("heal");
 
-                    // stats
                     JSONObject s = o.optJSONObject("stats");
                     if (s != null) {
                         it.stats = new Stats(
@@ -185,7 +195,6 @@ public class GameRepository {
                         );
                     }
 
-                    // skill buffs
                     JSONObject sb = o.optJSONObject("skillBuffs");
                     if (sb != null) {
                         it.skillBuffs = new HashMap<>();
@@ -212,19 +221,14 @@ public class GameRepository {
             Type t = new TypeToken<List<Monster>>() {}.getType();
             List<Monster> list = gson.fromJson(json, t);
             if (list != null) {
-                for (Monster m : list) {
-                    if (m != null && m.id != null) monsters.put(m.id, ensureMonsterDefaults(m));
-                }
+                for (Monster m : list) if (m != null && m.id != null) monsters.put(m.id, ensureMonsterDefaults(m));
             }
-            // create a default region if no JSON will be present (safety)
             if (slayerRegions.isEmpty() && !monsters.isEmpty()) {
-                slayerRegions.put("basecamp",
-                        new SlayerRegion("basecamp", "Basecamp", new ArrayList<>(monsters.keySet())));
+                slayerRegions.put("basecamp", new SlayerRegion("basecamp", "Basecamp", new ArrayList<>(monsters.keySet())));
             }
         } catch (Exception ignored) {}
     }
 
-    // Shop
     public void loadShopFromAssets() {
         if (!shop.isEmpty()) return;
         try (InputStream is = app.getAssets().open(ASSET_SHOP)) {
@@ -235,30 +239,23 @@ public class GameRepository {
         } catch (Exception ignored) {}
     }
 
-    /* ============================
-     * Recipes registry + JSON config
-     * ============================ */
     private void loadRecipesFromAssets() {
         if (!recipes.isEmpty()) return;
         try (InputStream is = app.getAssets().open(ASSET_RECIPES)) {
             String json = readStream(is);
-            org.json.JSONObject root = new org.json.JSONObject(json);
-            org.json.JSONArray arr = root.optJSONArray("recipes");
+            JSONObject root = new JSONObject(json);
+            JSONArray arr = root.optJSONArray("recipes");
             if (arr != null) {
-                com.google.gson.reflect.TypeToken<java.util.List<Recipe>> tt =
-                        new com.google.gson.reflect.TypeToken<java.util.List<Recipe>>() {};
-                java.util.List<Recipe> list = new Gson().fromJson(arr.toString(), tt.getType());
-                if (list != null) {
-                    for (Recipe r : list) if (r != null && r.id != null) recipes.put(r.id, r);
-                }
+                Type tt = new com.google.gson.reflect.TypeToken<List<Recipe>>() {}.getType();
+                List<Recipe> list = new Gson().fromJson(arr.toString(), tt);
+                if (list != null) for (Recipe r : list) if (r != null && r.id != null) recipes.put(r.id, r);
             }
         } catch (Exception ignored) {}
     }
 
     @Nullable public Recipe getRecipe(String id) { return recipes.get(id); }
-
-    public java.util.List<Recipe> getRecipesBySkill(SkillId skill) {
-        java.util.List<Recipe> out = new java.util.ArrayList<>();
+    public List<Recipe> getRecipesBySkill(SkillId skill) {
+        List<Recipe> out = new ArrayList<>();
         for (Recipe r : recipes.values()) if (r != null && r.skill == skill) out.add(r);
         return out;
     }
@@ -269,15 +266,11 @@ public class GameRepository {
         return pc.bag.getOrDefault(iid, 0);
     }
 
-    // Map recipe ingredient ids to actual bag ids (handles legacy/raw names)
-    /** Map recipe ingredient ids to actual item ids in items.json. */
     private String resolveItemAlias(String id) {
         if ("raw_shrimp".equalsIgnoreCase(id)) return "fish_raw_shrimp";
         if ("raw_crayfish".equalsIgnoreCase(id)) return "fish_raw_crayfish";
-        // ... other aliases
-        return id; // Default: no alias, id is already canonical
+        return id;
     }
-
 
     public boolean canCraft(String recipeId, int times) {
         Recipe r = getRecipe(recipeId);
@@ -302,7 +295,6 @@ public class GameRepository {
 
         PlayerCharacter pc = loadOrCreatePlayer();
 
-        // pre-check
         if (r.inputs != null) {
             for (RecipeIO in : r.inputs) {
                 if (in == null || in.id == null || in.qty <= 0) continue;
@@ -311,7 +303,6 @@ public class GameRepository {
                 int have = pc.bag.getOrDefault(needId, 0);
                 if (have < need) { toast("Missing materials"); return false; }
             }
-            // consume
             for (RecipeIO in : r.inputs) {
                 if (in == null || in.id == null || in.qty <= 0) continue;
                 String needId = resolveItemAlias(in.id);
@@ -322,7 +313,6 @@ public class GameRepository {
             }
         }
 
-        // outputs
         if (r.outputs != null) {
             for (RecipeIO out : r.outputs) {
                 if (out == null || out.id == null || out.qty <= 0) continue;
@@ -330,7 +320,6 @@ public class GameRepository {
             }
         }
 
-        // XP
         if (r.xp > 0 && r.skill != null) addSkillExp(r.skill, r.xp * times);
 
         save();
@@ -343,7 +332,6 @@ public class GameRepository {
         Recipe r = getRecipe(id);
         if (r == null) { toast("Unknown recipe"); return false; }
 
-        // level gate
         int level = skillLevel(r.skill);
         if (level < Math.max(1, r.reqLevel)) {
             toast((r.name != null ? r.name : r.id) + " requires Lv " + r.reqLevel);
@@ -352,7 +340,6 @@ public class GameRepository {
 
         PlayerCharacter pc = loadOrCreatePlayer();
 
-        // check inputs
         if (r.inputs == null || r.inputs.isEmpty()) { toast("Recipe has no inputs"); return false; }
         for (RecipeIO in : r.inputs) {
             if (in == null || in.id == null || in.qty <= 0) continue;
@@ -362,7 +349,6 @@ public class GameRepository {
             if (have < need) { toast("Need " + itemName(needId) + " ×" + need); return false; }
         }
 
-        // consume
         for (RecipeIO in : r.inputs) {
             if (in == null || in.id == null || in.qty <= 0) continue;
             String needId = resolveItemAlias(in.id);
@@ -372,7 +358,6 @@ public class GameRepository {
             if (pc.bag.get(needId) != null && pc.bag.get(needId) <= 0) pc.bag.remove(needId);
         }
 
-        // outputs
         int totalOut = 0;
         String toastLabel = (r.name != null ? r.name : r.id);
         if (r.outputs != null) {
@@ -380,11 +365,10 @@ public class GameRepository {
                 if (out == null || out.id == null || out.qty <= 0) continue;
                 pc.addItem(out.id, out.qty);
                 totalOut += out.qty;
-                toastLabel = itemName(out.id); // show actual cooked item
+                toastLabel = itemName(out.id);
             }
         }
 
-        // XP
         if (r.xp > 0 && r.skill != null) addSkillExp(r.skill, r.xp);
 
         save();
@@ -393,14 +377,9 @@ public class GameRepository {
         return true;
     }
 
-
-
-
     /* ============================
-     * Slayer regions registry + JSON config
+     * Slayer regions + config
      * ============================ */
-
-    // in-memory registry used by the game
     public static class SlayerRegion {
         public final String id;
         public final String label;
@@ -411,9 +390,7 @@ public class GameRepository {
     }
     private final Map<String, SlayerRegion> slayerRegions = new HashMap<>();
 
-    public List<SlayerRegion> listSlayerRegions() {
-        return new ArrayList<>(slayerRegions.values());
-    }
+    public List<SlayerRegion> listSlayerRegions() { return new ArrayList<>(slayerRegions.values()); }
 
     public void registerSlayerRegion(String id, String label, List<String> monsterIds) {
         if (id == null || label == null || monsterIds == null || monsterIds.isEmpty()) return;
@@ -423,9 +400,7 @@ public class GameRepository {
         slayerRegions.put(id, new SlayerRegion(id, label, filtered));
     }
 
-    // ---- JSON config model (assets/game/slayer.v1.json) ----
     @Nullable private SlayerCfg slayerCfg;
-
     private static class SlayerCfg {
         @Nullable Costs costs;
         @Nullable KillCountCfg killCount;
@@ -460,23 +435,16 @@ public class GameRepository {
                     if (r == null || r.id == null || r.label == null || r.monsters == null) continue;
                     List<String> filtered = new ArrayList<>();
                     for (String mid : r.monsters) if (monsters.containsKey(mid)) filtered.add(mid);
-                    if (!filtered.isEmpty()) {
-                        slayerRegions.put(r.id, new SlayerRegion(r.id, r.label, filtered));
-                    }
+                    if (!filtered.isEmpty()) slayerRegions.put(r.id, new SlayerRegion(r.id, r.label, filtered));
                 }
             }
-        } catch (Exception ignored) {
-            // If JSON missing, keep fallback created after monsters load.
-        }
+        } catch (Exception ignored) {}
 
-        // still ensure at least one region exists
         if (slayerRegions.isEmpty() && !monsters.isEmpty()) {
-            slayerRegions.put("basecamp",
-                    new SlayerRegion("basecamp", "Basecamp", new ArrayList<>(monsters.keySet())));
+            slayerRegions.put("basecamp", new SlayerRegion("basecamp", "Basecamp", new ArrayList<>(monsters.keySet())));
         }
     }
 
-    // helpers to fetch effective costs & rules (region override > global > fallback)
     @Nullable private RegionCfg getRegionCfg(@Nullable String regionId) {
         if (regionId == null || slayerCfg == null || slayerCfg.regions == null) return null;
         for (RegionCfg r : slayerCfg.regions) if (r != null && regionId.equals(r.id)) return r;
@@ -538,10 +506,7 @@ public class GameRepository {
      * ============================ */
     public void seedMonsters(List<Monster> list) {
         if (list == null || list.isEmpty()) return;
-        for (Monster m : list) {
-            if (m == null || m.id == null) continue;
-            monsters.put(m.id, ensureMonsterDefaults(m));
-        }
+        for (Monster m : list) if (m != null && m.id != null) monsters.put(m.id, ensureMonsterDefaults(m));
     }
 
     private static Monster ensureMonsterDefaults(Monster m) {
@@ -553,7 +518,6 @@ public class GameRepository {
     /* ============================
      * Player Save / Load
      * ============================ */
-
     private static int xpAtStartOfLevel(int lvl) {
         int x = 0;
         int L = Math.max(1, lvl);
@@ -566,12 +530,10 @@ public class GameRepository {
 
         String json = sp.getString(KEY_PLAYER, null);
         if (json != null) {
-            // First try normal parse (new format where skills map to ints)
             try {
                 Type t = new TypeToken<PlayerCharacter>() {}.getType();
                 player = gson.fromJson(json, t);
             } catch (Exception parseFail) {
-                // Fallback: legacy migration – skills were objects not ints
                 try {
                     JSONObject root = new JSONObject(json);
                     JSONObject skills = root.optJSONObject("skills");
@@ -581,33 +543,24 @@ public class GameRepository {
                             for (int i = 0; i < names.length(); i++) {
                                 String key = names.optString(i, null);
                                 if (key == null) continue;
-
                                 Object val = skills.opt(key);
                                 if (val instanceof JSONObject) {
                                     JSONObject sobj = (JSONObject) val;
-                                    int xp = sobj.has("xp") ? sobj.optInt("xp",
-                                            sobj.optInt("exp", 0))
-                                            : sobj.optInt("exp", 0);
+                                    int xp = sobj.has("xp") ? sobj.optInt("xp", sobj.optInt("exp", 0)) : sobj.optInt("exp", 0);
                                     if (xp <= 0) {
-                                        int lvl = Math.max(1,
-                                                sobj.optInt("level",
-                                                        sobj.optInt("lvl", 1)));
+                                        int lvl = Math.max(1, sobj.optInt("level", sobj.optInt("lvl", 1)));
                                         xp = xpAtStartOfLevel(lvl);
                                     }
                                     skills.put(key, xp);
                                 } else if (val == JSONObject.NULL) {
                                     skills.put(key, 0);
                                 } else if (val instanceof String) {
-                                    try {
-                                        skills.put(key, Integer.parseInt((String) val));
-                                    } catch (NumberFormatException ignored) {
-                                        skills.put(key, 0);
-                                    }
+                                    try { skills.put(key, Integer.parseInt((String) val)); }
+                                    catch (NumberFormatException ignored) { skills.put(key, 0); }
                                 }
                             }
                         }
                     }
-                    // Re-parse using migrated JSON
                     Type t = new TypeToken<PlayerCharacter>() {}.getType();
                     player = gson.fromJson(root.toString(), t);
                 } catch (Exception migrateFail) {
@@ -622,7 +575,6 @@ public class GameRepository {
                 if (player.currencies == null) player.currencies = new HashMap<>();
                 if (player.base == null) player.base = new Stats(12, 6, 0.0, 100, 0.05, 1.5);
 
-                // migrate any other legacy bits now that we can access the object
                 player.migrateSkillsToXpIfNeeded();
 
                 if (player.base.health <= 0) player.base.health = 100;
@@ -641,24 +593,19 @@ public class GameRepository {
 
                 publishCurrencies();
                 publishHp();
-
-                // load persisted Slayer assignment if any
                 loadSlayerFromSpIfPresent();
-
                 return player;
             }
         }
 
-        // ---- new player seed path (unchanged) ----
+        // New player seed
         player = new PlayerCharacter();
         player.normalizeCurrencies();
 
-        addToBag("wpn_rusty_sword", 1);
-        addToBag("helm_leather_cap", 1);
-        addToBag("food_apple", 5);
-        addToBag("pot_basic_combat", 2);
-        addToBag("pot_basic_noncombat", 2);
-        addToBag("syrup_basic", 1);
+        addToBag("food_apple", 1000);
+        addToBag("pot_basic_combat", 1000);
+        addToBag("pot_basic_noncombat", 1000);
+        addToBag("syrup_basic", 1000);
 
         if (player.currentHp == null) {
             int maxHp = totalStats().health;
@@ -676,16 +623,16 @@ public class GameRepository {
         if (slayerLive.getValue() != null) return;
         String s = sp.getString(KEY_SLAYER_JSON, null);
         if (s != null) {
-            try {
-                SlayerAssignment a = gson.fromJson(s, SlayerAssignment.class);
-                publishSlayer(a);
-            } catch (Exception ignored) {}
+            try { SlayerAssignment a = gson.fromJson(s, SlayerAssignment.class); publishSlayer(a); }
+            catch (Exception ignored) {}
         }
     }
 
     public void save() {
         if (player == null) return;
         sp.edit().putString(KEY_PLAYER, gson.toJson(player)).apply();
+        touchLocalUpdatedAt();
+        cloudSavePlayerDebounced();
     }
 
     /* ============================
@@ -708,9 +655,8 @@ public class GameRepository {
 
     public @Nullable EquipmentSlot slotOf(Item it) {
         if (it == null || it.slot == null) return null;
-        try {
-            return EquipmentSlot.valueOf(it.slot);
-        } catch (IllegalArgumentException e) {
+        try { return EquipmentSlot.valueOf(it.slot); }
+        catch (IllegalArgumentException e) {
             try { return EquipmentSlot.valueOf(it.slot.toUpperCase()); }
             catch (Exception ignored) { return null; }
         }
@@ -747,7 +693,7 @@ public class GameRepository {
      * Skill helpers (for UI)
      * ============================ */
     public int skillLevel(SkillId id) { return loadOrCreatePlayer().getSkillLevel(id); }
-    public int skillExp(SkillId id)    { return loadOrCreatePlayer().getSkillExp(id); }
+    public int skillExp(SkillId id)   { return loadOrCreatePlayer().getSkillExp(id); }
 
     public int skillXpIntoLevel(SkillId id) {
         int xp = skillExp(id);
@@ -761,7 +707,7 @@ public class GameRepository {
     }
 
     /* ============================
-     * Combat training skill (persisted choice)
+     * Combat training skill
      * ============================ */
     public @Nullable SkillId getCombatTrainingSkill() {
         String s = sp.getString(KEY_TRAIN_SKILL, null);
@@ -775,10 +721,7 @@ public class GameRepository {
     }
 
     public void setCombatTrainingSkill(@Nullable SkillId id) {
-        if (id == null) {
-            sp.edit().remove(KEY_TRAIN_SKILL).apply();
-            return;
-        }
+        if (id == null) { sp.edit().remove(KEY_TRAIN_SKILL).apply(); return; }
         if (!isCombatSkillEnum(id)) return;
         sp.edit().putString(KEY_TRAIN_SKILL, id.name()).apply();
     }
@@ -823,7 +766,7 @@ public class GameRepository {
     }
 
     /* ============================
-     * Gathering state API
+     * Gathering state
      * ============================ */
     public boolean isGatheringActive() {
         Boolean b = gatheringLive.getValue();
@@ -840,7 +783,7 @@ public class GameRepository {
     @Nullable public SkillId getGatheringSkill() { return gatheringSkill; }
 
     /* ============================
-     * Battle state API
+     * Battle state
      * ============================ */
     public boolean isBattleActive() {
         Boolean b = battleLive.getValue();
@@ -854,65 +797,41 @@ public class GameRepository {
     }
 
     /* ============================
-     * Slayer API (assignment + JSON rules + coins)
+     * Slayer API
      * ============================ */
-
-    private void publishSlayer(@Nullable SlayerAssignment a) {
-        slayerLive.postValue(a);
-    }
+    private void publishSlayer(@Nullable SlayerAssignment a) { slayerLive.postValue(a); }
     private void persistSlayerToSp(@Nullable SlayerAssignment a) {
         SharedPreferences.Editor ed = sp.edit();
         if (a == null) ed.remove(KEY_SLAYER_JSON);
         else ed.putString(KEY_SLAYER_JSON, gson.toJson(a));
         ed.apply();
     }
-    public @Nullable SlayerAssignment getSlayerAssignment() {
-        loadSlayerFromSpIfPresent();
-        return slayerLive.getValue();
-    }
+    public @Nullable SlayerAssignment getSlayerAssignment() { loadSlayerFromSpIfPresent(); return slayerLive.getValue(); }
 
-    /** Assign a task (stores regionId) */
     public void assignSlayerTask(String regionId, String monsterId, int required, int completionBonus, @Nullable String label) {
         Monster m = getMonster(monsterId);
         String fallback = (m != null && m.name != null) ? m.name : monsterId;
         SlayerAssignment a = new SlayerAssignment(
-                regionId,
-                monsterId,
-                (label != null ? label : fallback),
-                Math.max(1, required),
-                Math.max(0, completionBonus)
+                regionId, monsterId, (label != null ? label : fallback),
+                Math.max(1, required), Math.max(0, completionBonus)
         );
         persistSlayerToSp(a);
         publishSlayer(a);
         toast("Slayer task: " + a.label + " ×" + a.required);
     }
 
-    /** Back-compat overload (no region label) */
     public void assignSlayerTask(String monsterId, int required, int completionBonus) {
         assignSlayerTask("basecamp", monsterId, required, completionBonus, null);
     }
 
-    public void clearSlayerTask() {
-        persistSlayerToSp(null);
-        publishSlayer(null);
-    }
+    public void clearSlayerTask() { persistSlayerToSp(null); publishSlayer(null); }
 
-    /**
-     * Called by CombatEngine when a monster dies:
-     * - Increments progress if it matches the active task
-     * - Grants per-kill Slayer coins (Monster.slayerReward) while task is active
-     * - If finished: just toast; actual coin reward is granted when the player claims
-     */
-    /** Call this once per monster death. Increments Slayer task if it matches. */
     public void onMonsterKilled(@Nullable String monsterId) {
         if (monsterId == null) return;
         SlayerAssignment a = getSlayerAssignment();
         if (a == null || a.isComplete()) return;
-
-        // compare case-insensitively to be robust
         if (!monsterId.equalsIgnoreCase(a.monsterId)) return;
 
-        // Per-kill Slayer coins (only while on task)
         Monster m = getMonster(a.monsterId);
         if (m != null && m.slayerReward > 0) {
             addCurrency("slayer", m.slayerReward);
@@ -922,18 +841,11 @@ public class GameRepository {
         a.done = Math.max(0, a.done) + 1;
         persistSlayerToSp(a);
         publishSlayer(a);
-
-        if (a.isComplete()) {
-            toast("Task complete — claim your reward!");
-        }
+        if (a.isComplete()) toast("Task complete — claim your reward!");
     }
 
-    /** Convenience overload. */
-    public void onMonsterKilled(@Nullable Monster m) {
-        onMonsterKilled(m != null ? m.id : null);
-    }
+    public void onMonsterKilled(@Nullable Monster m) { onMonsterKilled(m != null ? m.id : null); }
 
-    // Simple “combat level” scaler (not OSRS-accurate; good enough for task sizing)
     public int getCombatLevel() {
         int atk = skillLevel(SkillId.ATTACK);
         int str = skillLevel(SkillId.STRENGTH);
@@ -942,32 +854,21 @@ public class GameRepository {
         int mag = skillLevel(SkillId.MAGIC);
         int hp  = skillLevel(SkillId.HP);
         int offensive = Math.max(Math.max(atk, str), Math.max(arch, mag));
-        double cl = (offensive + def + (hp * 0.5));
-        cl = cl / 2.0;
+        double cl = (offensive + def + (hp * 0.5)) / 2.0;
         int out = (int)Math.round(cl);
         if (out < 1) out = 1;
         if (out > 99) out = 99;
         return out;
     }
 
-    /* ---- Public API used by the Slayer Master NPC / Basecamp UI ---- */
-
-    /** Roll a task in the default region. */
     @Nullable public SlayerAssignment rollNewSlayerTask() { return rollNewSlayerTask("basecamp", false); }
-    /** Roll a task in the default region, optionally forcing replace. */
     @Nullable public SlayerAssignment rollNewSlayerTask(boolean forceReplace) { return rollNewSlayerTask("basecamp", forceReplace); }
 
-    /** Roll a task for a region. Guard only; real roll handled by the monster overload. */
     @Nullable
     public SlayerAssignment rollNewSlayerTask(String regionId, boolean forceReplace) {
         SlayerAssignment cur = getSlayerAssignment();
         boolean rerolling = (cur != null && !cur.isComplete());
-
-        // If there's an active (not complete) task and we're not forcing replace, block.
-        if (rerolling && !forceReplace) {
-            toast("Finish or abandon your current task first.");
-            return cur;
-        }
+        if (rerolling && !forceReplace) { toast("Finish or abandon your current task first."); return cur; }
 
         SlayerRegion reg = slayerRegions.get(regionId);
         if (reg == null || reg.monsterIds == null || reg.monsterIds.isEmpty()) {
@@ -975,7 +876,6 @@ public class GameRepository {
             return cur;
         }
 
-        // ✅ Only charge on reroll
         if (rerolling) {
             int rollCost = effectiveRollCost(regionId);
             if (rollCost > 0 && !spendCurrency("slayer", rollCost)) {
@@ -984,7 +884,6 @@ public class GameRepository {
             }
         }
 
-        // Pick a random monster in the region
         String monsterId = reg.monsterIds.get(rng.nextInt(reg.monsterIds.size()));
         Monster m = getMonster(monsterId);
 
@@ -993,11 +892,10 @@ public class GameRepository {
         String label = reg.label + " — " + (m != null && m.name != null ? m.name : monsterId);
 
         assignSlayerTask(regionId, monsterId, required, completionBonus, label);
-        toast(rerolling ? "Task rerolled." : "Task assigned.");  // no charge on first assignment
+        toast(rerolling ? "Task rerolled." : "Task assigned.");
         return slayerLive.getValue();
     }
 
-    /** NEW: Roll a task for a region, optionally specifying the monster to slay. Charges roll cost. */
     @Nullable
     public SlayerAssignment rollNewSlayerTask(String regionId, String monsterId) {
         SlayerAssignment cur = getSlayerAssignment();
@@ -1013,7 +911,6 @@ public class GameRepository {
             return cur;
         }
 
-        // ✅ Only charge on reroll
         if (rerolling) {
             int rollCost = effectiveRollCost(regionId);
             if (rollCost > 0 && !spendCurrency("slayer", rollCost)) {
@@ -1032,22 +929,16 @@ public class GameRepository {
         return slayerLive.getValue();
     }
 
-    /** Abandon current task. Costs per-region Slayer coins from JSON (or fallback). */
     public boolean abandonSlayerTask() {
         SlayerAssignment a = getSlayerAssignment();
         if (a == null) { toast("No Slayer task to abandon."); return false; }
-
         int cost = effectiveAbandonCost(a.regionId);
-        if (!spendCurrency("slayer", cost)) {
-            toast("Need " + cost + " Slayer coins to abandon.");
-            return false;
-        }
+        if (!spendCurrency("slayer", cost)) { toast("Need " + cost + " Slayer coins to abandon."); return false; }
         clearSlayerTask();
         toast("Task abandoned (−" + cost + " Slayer).");
         return true;
     }
 
-    /** Claim reward if task complete. Pays the precomputed (or computed) bonus. */
     public boolean claimSlayerTaskIfComplete() {
         SlayerAssignment a = getSlayerAssignment();
         if (a == null) { toast("No Slayer task active."); return false; }
@@ -1061,7 +952,7 @@ public class GameRepository {
     }
 
     /* ============================
-     * Food & Potions API
+     * Food & Potions
      * ============================ */
     public List<InventoryItem> getFoodItems() {
         List<InventoryItem> list = new ArrayList<>();
@@ -1075,7 +966,6 @@ public class GameRepository {
         return list;
     }
 
-    /** Consume a food item (CONSUMABLE with heal > 0) and decrement quantity. */
     public void consumeFood(String foodId) {
         PlayerCharacter pc = loadOrCreatePlayer();
         Integer have = pc.bag.get(foodId);
@@ -1135,7 +1025,6 @@ public class GameRepository {
         publishHp();
     }
 
-    /** Consume one “syrup”: if it has a heal value, heal; otherwise give a small speed buff. */
     public void consumeSyrup() {
         PlayerCharacter pc = loadOrCreatePlayer();
 
@@ -1145,16 +1034,10 @@ public class GameRepository {
             if (it != null && "CONSUMABLE".equals(it.type)) {
                 String nid = it.id != null ? it.id.toLowerCase() : "";
                 String nname = it.name != null ? it.name.toLowerCase() : "";
-                if (nid.contains("syrup") || nname.contains("syrup")) {
-                    syrupId = id;
-                    break;
-                }
+                if (nid.contains("syrup") || nname.contains("syrup")) { syrupId = id; break; }
             }
         }
-        if (syrupId == null) {
-            toast("No syrup available");
-            return;
-        }
+        if (syrupId == null) { toast("No syrup available"); return; }
 
         Item syrup = getItem(syrupId);
         boolean didSomething = false;
@@ -1177,9 +1060,7 @@ public class GameRepository {
             Integer have = pc.bag.get(syrupId);
             if (have != null) {
                 pc.bag.put(syrupId, have - 1);
-                if (pc.bag.get(syrupId) != null && pc.bag.get(syrupId) <= 0) {
-                    pc.bag.remove(syrupId);
-                }
+                if (pc.bag.get(syrupId) != null && pc.bag.get(syrupId) <= 0) pc.bag.remove(syrupId);
             }
             save();
             publishHp();
@@ -1187,9 +1068,8 @@ public class GameRepository {
     }
 
     /* ============================
-     * Equipment API (Inventory)
+     * Equipment API
      * ============================ */
-    /** Equip an item from the bag into its slot. Returns true if it equipped. */
     public boolean equip(String itemId) {
         PlayerCharacter pc = loadOrCreatePlayer();
         Item it = getItem(itemId);
@@ -1200,15 +1080,12 @@ public class GameRepository {
         Integer have = pc.bag.get(itemId);
         if (have == null || have <= 0) { toast("You don't have that item"); return false; }
 
-        // Remove from bag
         pc.bag.put(itemId, have - 1);
         if (pc.bag.get(itemId) != null && pc.bag.get(itemId) <= 0) pc.bag.remove(itemId);
 
-        // Swap with currently equipped
         String prev = pc.equipment.put(slot, itemId);
         if (prev != null) pc.addItem(prev, 1);
 
-        // Clamp HP if max reduced
         int maxHp = totalStats().health;
         if (pc.currentHp == null) pc.currentHp = maxHp;
         if (pc.currentHp > maxHp) pc.currentHp = maxHp;
@@ -1219,7 +1096,6 @@ public class GameRepository {
         return true;
     }
 
-    /** Unequip whatever is in the slot back to the bag. */
     public boolean unequip(EquipmentSlot slot) {
         PlayerCharacter pc = loadOrCreatePlayer();
         if (slot == null) return false;
@@ -1290,23 +1166,9 @@ public class GameRepository {
 
     private static @Nullable String canonicalItemId(@Nullable String id) {
         if (id == null) return null;
-        String s = id.toLowerCase(); // Convert to lowercase for consistent comparison and output
-
-        // Aliases that should map to "fish_raw_shrimp"
-        if (s.equals("raw_shrimp") || s.equals("shore_shrimp") || s.equals("shrimp_raw")) {
-            return "fish_raw_shrimp";
-        }
-
-        // If it's already the canonical form (or another item that doesn't have specific aliases)
-        // ensure we return the consistently cased version.
-        // For example, if "fish_raw_shrimp" is passed in, s becomes "fish_raw_shrimp",
-        // it doesn't match the if, and then it should return "fish_raw_shrimp" (lowercase s).
-        if (s.equals("fish_raw_shrimp")) { // Explicitly handle the canonical form itself
-            return "fish_raw_shrimp";
-        }
-
-        // For all other items that don't have specific aliases,
-        // return their lowercased version as the canonical ID.
+        String s = id.toLowerCase();
+        if (s.equals("raw_shrimp") || s.equals("shore_shrimp") || s.equals("shrimp_raw")) return "fish_raw_shrimp";
+        if (s.equals("fish_raw_shrimp")) return "fish_raw_shrimp";
         return s;
     }
 
@@ -1314,8 +1176,7 @@ public class GameRepository {
      * Pending loot (combat)
      * ============================ */
     private final List<PendingLoot> pendingLoot = new ArrayList<>();
-    public final MutableLiveData<List<InventoryItem>> pendingLootLive =
-            new MutableLiveData<>(new ArrayList<>());
+    public final MutableLiveData<List<InventoryItem>> pendingLootLive = new MutableLiveData<>(new ArrayList<>());
 
     public void addPendingCurrency(String code, String name, int qty) {
         if (qty <= 0) return;
@@ -1375,8 +1236,10 @@ public class GameRepository {
                 String code = (pl.id != null && pl.id.startsWith("currency:"))
                         ? pl.id.substring("currency:".length()) : pl.id;
                 pc.addCurrency(code, pl.quantity);
+                cloudIncrementCurrency(code, pl.quantity);
             } else {
                 pc.addItem(pl.id, pl.quantity);
+                cloudIncrementBag(pl.id, pl.quantity);
             }
         }
         pendingLoot.clear();
@@ -1396,26 +1259,22 @@ public class GameRepository {
     }
 
     /* ============================
-     * Gathering: direct rewards (no pending buffer)
+     * Gathering: direct rewards
      * ============================ */
-
-    /** Give a gathered ITEM straight to the bag. */
     public void grantGatheredItem(String itemId, int qty) {
         if (itemId == null || qty <= 0) return;
         PlayerCharacter pc = loadOrCreatePlayer();
         pc.addItem(itemId, qty);
         save();
-        // (intentionally no per-item toast here; ActionEngine aggregates a toast)
+        cloudIncrementBag(itemId, qty);
     }
 
-    /** Give a gathered CURRENCY straight to balances and toast it. */
     public void grantGatheredCurrency(String code, long amount) {
         if (code == null || amount <= 0) return;
         addCurrency(code, amount);
         toast("+" + amount + " " + capitalize(code));
     }
 
-    /** Decide by id format; supports "currency:xxx" or plain item id. */
     public void grantGathered(String idOrCurrency, int qty, @Nullable String displayNameHint) {
         if (idOrCurrency == null || qty <= 0) return;
         if (idOrCurrency.startsWith("currency:")) {
@@ -1429,16 +1288,11 @@ public class GameRepository {
     /* ============================
      * Shop API
      * ============================ */
-
-    @Nullable
-    private ShopEntry findShopByItem(String itemId) {
-        for (ShopEntry e : shop) {
-            if (e != null && itemId.equals(e.itemId)) return e;
-        }
+    @Nullable private ShopEntry findShopByItem(String itemId) {
+        for (ShopEntry e : shop) if (e != null && itemId.equals(e.itemId)) return e;
         return null;
     }
 
-    /** UI row for shop. */
     public static class ShopRow {
         public final String itemId;
         public final String name;
@@ -1455,7 +1309,6 @@ public class GameRepository {
         }
     }
 
-    /** Snapshot with current owned counts. */
     public List<ShopRow> getShopRows() {
         PlayerCharacter pc = loadOrCreatePlayer();
         List<ShopRow> out = new ArrayList<>();
@@ -1472,7 +1325,6 @@ public class GameRepository {
         return out;
     }
 
-    /** Try to buy qty; returns true if purchased. */
     public boolean buyItem(String itemId, int qty) {
         if (qty <= 0) return false;
         ShopEntry se = findShopByItem(itemId);
@@ -1501,7 +1353,6 @@ public class GameRepository {
         return true;
     }
 
-    /** Sell qty back at 25% of list price if shop carries the item. */
     public boolean sellItem(String itemId, int qty) {
         if (qty <= 0) return false;
         ShopEntry se = findShopByItem(itemId);
@@ -1527,21 +1378,29 @@ public class GameRepository {
     }
 
     /* ============================
-     * Currency convenience
+     * Currency helpers
      * ============================ */
     public long getCurrency(String id) { return loadOrCreatePlayer().getCurrency(id); }
+
     public void addCurrency(String id, long amount) {
         PlayerCharacter pc = loadOrCreatePlayer();
         pc.addCurrency(id, amount);
         save();
         publishCurrencies();
+        cloudIncrementCurrency(id, amount);
     }
+
     public boolean spendCurrency(String id, long amount) {
         PlayerCharacter pc = loadOrCreatePlayer();
         boolean ok = pc.spendCurrency(id, amount);
-        if (ok) { save(); publishCurrencies(); }
+        if (ok) {
+            save();
+            publishCurrencies();
+            cloudIncrementCurrency(id, -amount);
+        }
         return ok;
     }
+
     public List<InventoryItem> listCurrencies() {
         PlayerCharacter pc = loadOrCreatePlayer();
         List<InventoryItem> out = new ArrayList<>();
@@ -1554,7 +1413,6 @@ public class GameRepository {
     public long getGold() { return getCurrency("gold"); }
     public void addGold(long amount) { addCurrency("gold", amount); }
 
-    // Publish helpers
     private void publishCurrencies() {
         PlayerCharacter pc = loadOrCreatePlayer();
         currencyLive.postValue(new HashMap<>(pc.currencies));
@@ -1572,11 +1430,9 @@ public class GameRepository {
     public long getLastSeen() { return sp.getLong(KEY_LAST_SEEN, System.currentTimeMillis()); }
 
     /* ============================
-     * Per-skill “last picked action” (UX)
+     * Per-skill “last picked action”
      * ============================ */
-    private static String keyLastActionFor(SkillId skill) {
-        return "last_action_" + (skill != null ? skill.name() : "unknown");
-    }
+    private static String keyLastActionFor(SkillId skill) { return "last_action_" + (skill != null ? skill.name() : "unknown"); }
 
     public void saveLastActionForSkill(@Nullable SkillId skill, @Nullable String actionId) {
         if (skill == null || actionId == null) return;
@@ -1589,9 +1445,6 @@ public class GameRepository {
         return sp.getString(keyLastActionFor(skill), null);
     }
 
-    /** ---------- Helpers expected by SkillDetailFragment ---------- */
-
-    /** Compat: check unlock using a provided level. */
     public boolean isUnlocked(@Nullable Action a, int currentLevel) {
         if (a == null) return false;
         int req = Math.max(1, a.reqLevel);
@@ -1599,17 +1452,12 @@ public class GameRepository {
         return lvl >= req;
     }
 
-    /** True if the player meets this action’s level requirement. */
     public boolean isUnlocked(@Nullable Action a) {
         if (a == null || a.skill == null) return false;
         int playerLevel = skillLevel(a.skill);
         return isUnlocked(a, playerLevel);
     }
 
-    /**
-     * Returns the best unlocked (highest reqLevel) action for this skill
-     * given an explicit current level, or null if none are unlocked yet.
-     */
     @Nullable
     public Action bestUnlockedFor(@Nullable SkillId skill, int currentLevel) {
         if (skill == null) return null;
@@ -1618,38 +1466,22 @@ public class GameRepository {
         for (Action a : actions.values()) {
             if (a == null || a.skill != skill) continue;
             int req = Math.max(1, a.reqLevel);
-            if (currentLevel >= req && req > bestReq) {
-                best = a;
-                bestReq = req;
-            }
+            if (currentLevel >= req && req > bestReq) { best = a; bestReq = req; }
         }
         return best;
     }
 
-    /**
-     * Returns the best unlocked (highest reqLevel) action for this skill using the player's current level,
-     * or null if none are unlocked yet.
-     */
     @Nullable
     public Action bestUnlockedFor(@Nullable SkillId skill) {
         if (skill == null) return null;
         return bestUnlockedFor(skill, skillLevel(skill));
     }
 
-    /** Persist the last-picked action for UX. */
     public void setLastPickedAction(@Nullable SkillId skill, @Nullable String actionId) {
         saveLastActionForSkill(skill, actionId);
     }
+    public void setLastPickedAction(@Nullable Action a) { if (a != null) saveLastActionForSkill(a.skill, a.id); }
 
-    /** Convenience overload. */
-    public void setLastPickedAction(@Nullable Action a) {
-        if (a != null) saveLastActionForSkill(a.skill, a.id);
-    }
-
-    /**
-     * Returns the last-picked Action for this skill if present and still unlocked.
-     * Otherwise falls back to the best currently unlocked action. May return null.
-     */
     @Nullable
     public Action getLastPickedAction(@Nullable SkillId skill) {
         if (skill == null) return null;
@@ -1662,7 +1494,6 @@ public class GameRepository {
     }
 
     public String normalizeItemIdForBag(String id) {
-        // same logic you used in craftOnce()
         if (id == null) return null;
         PlayerCharacter pc = loadOrCreatePlayer();
         if ("raw_shrimp".equalsIgnoreCase(id)
@@ -1684,35 +1515,23 @@ public class GameRepository {
         StringBuilder sb = new StringBuilder();
         byte[] buf = new byte[4096];
         int n;
-        while ((n = is.read(buf)) != -1) {
-            sb.append(new String(buf, 0, n, StandardCharsets.UTF_8));
-        }
+        while ((n = is.read(buf)) != -1) sb.append(new String(buf, 0, n, StandardCharsets.UTF_8));
         return sb.toString();
     }
 
     /* ============================
-     * Toast Helper (throttled, main-thread safe)
+     * Toast Helper
      * ============================ */
     public void toast(String msg) {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            throttleToast(msg);
-        } else {
-            mainHandler.post(() -> throttleToast(msg));
-        }
+        if (Looper.myLooper() == Looper.getMainLooper()) throttleToast(msg);
+        else mainHandler.post(() -> throttleToast(msg));
     }
 
     private void throttleToast(String msg) {
         long now = SystemClock.uptimeMillis();
-        if (now >= nextAllowedToastAt) {
-            showToastNow(msg);
-            return;
-        }
-        if (deferredToastMsg != null && deferredToastMsg.equals(msg)) {
-            deferredToastCount++;
-        } else {
-            deferredToastMsg = msg;
-            deferredToastCount = 1;
-        }
+        if (now >= nextAllowedToastAt) { showToastNow(msg); return; }
+        if (deferredToastMsg != null && deferredToastMsg.equals(msg)) deferredToastCount++;
+        else { deferredToastMsg = msg; deferredToastCount = 1; }
         mainHandler.removeCallbacks(toastDrain);
         mainHandler.postAtTime(toastDrain, nextAllowedToastAt);
     }
@@ -1723,7 +1542,7 @@ public class GameRepository {
             currentToast = Toast.makeText(app, msg, Toast.LENGTH_SHORT);
             currentToast.show();
             nextAllowedToastAt = SystemClock.uptimeMillis() + TOAST_MIN_INTERVAL_MS;
-        } catch (Throwable ignored) { }
+        } catch (Throwable ignored) {}
     }
 
     /* ============================
@@ -1736,14 +1555,198 @@ public class GameRepository {
         public boolean isCurrency;
     }
 
-    /** Dev helper to grant items. */
     public void giveItem(String itemId, int qty) {
         if (itemId == null || qty == 0) return;
         PlayerCharacter pc = loadOrCreatePlayer();
         pc.addItem(itemId, qty);
         save();
+        cloudIncrementBag(itemId, qty);
         toast("Granted " + qty + "× " + itemName(itemId));
     }
 
+    /* ============================
+     * Firestore helpers
+     * ============================ */
+    @Nullable
+    private DocumentReference charDoc() {
+        FirebaseUser u = auth.getCurrentUser();
+        if (u == null) return null;
+        return fdb.collection("playerCharacters").document(u.getUid());
+    }
 
+    private Map<String, Object> toMap(PlayerCharacter pc) {
+        java.lang.reflect.Type t = new com.google.gson.reflect.TypeToken<Map<String, Object>>(){}.getType();
+        return gson.fromJson(gson.toJson(pc), t);
+    }
+
+    private void cloudSavePlayerDebounced() {
+        if (auth.getCurrentUser() == null || player == null) return;
+        if (cloudSaveRunnable != null) mainHandler.removeCallbacks(cloudSaveRunnable);
+        cloudSaveRunnable = () -> {
+            try {
+                DocumentReference doc = charDoc();
+                if (doc == null || player == null) return;
+                Map<String, Object> data = toMap(player);
+                data.put("updatedAt", FieldValue.serverTimestamp());
+                doc.set(data, SetOptions.merge());
+            } catch (Throwable t) {
+                Log.w(TAG, "cloudSavePlayerDebounced failed", t);
+            }
+        };
+        mainHandler.postDelayed(cloudSaveRunnable, CLOUD_DEBOUNCE_MS);
+    }
+
+    private void cloudIncrementCurrency(String code, long delta) {
+        DocumentReference doc = charDoc();
+        if (doc == null || code == null) return;
+        Map<String, Object> patch = new HashMap<>();
+        patch.put("currencies." + code, FieldValue.increment(delta));
+        patch.put("updatedAt", FieldValue.serverTimestamp());
+        doc.set(patch, SetOptions.merge());
+    }
+
+    private void cloudIncrementBag(String itemId, int delta) {
+        if (itemId == null || delta == 0) return;
+        DocumentReference doc = charDoc();
+        if (doc == null) return;
+        String key = "bag." + String.valueOf(canonicalItemId(itemId));
+        Map<String, Object> patch = new HashMap<>();
+        patch.put(key, FieldValue.increment(delta));
+        patch.put("updatedAt", FieldValue.serverTimestamp());
+        doc.set(patch, SetOptions.merge());
+    }
+
+    public void startCloudSync() {
+        DocumentReference doc = charDoc();
+        if (doc == null) return;
+        if (cloudListener != null) cloudListener.remove();
+        cloudListener = doc.addSnapshotListener((snap, e) -> {
+            if (e != null) { Log.w(TAG, "cloud listen error", e); return; }
+            // Reserved for future cloud→local live merges if desired.
+        });
+    }
+
+    public void stopCloudSync() { if (cloudListener != null) { cloudListener.remove(); cloudListener = null; } }
+
+    /* ============================
+     * Cloud pull-if-newer
+     * ============================ */
+    public interface BoolCallback { void onResult(boolean updated); }
+
+    private long getLocalUpdatedAt() { return sp.getLong(KEY_LOCAL_UPDATED_AT, 0L); }
+    private void touchLocalUpdatedAt() { sp.edit().putLong(KEY_LOCAL_UPDATED_AT, System.currentTimeMillis()).apply(); }
+
+    public void loadFromCloudIfNewer(@NonNull BoolCallback cb) {
+        DocumentReference doc = charDoc();
+        if (doc == null) { cb.onResult(false); return; }
+
+        final long localMs = getLocalUpdatedAt();
+
+        doc.get().addOnSuccessListener(snap -> {
+            if (snap == null || !snap.exists()) {
+                try {
+                    loadOrCreatePlayer();
+                    cloudSavePlayerDebounced();
+                } catch (Throwable ignored) {}
+                cb.onResult(false);
+                return;
+            }
+
+            Timestamp ts = snap.getTimestamp("updatedAt");
+            long remoteMs = (ts != null) ? ts.toDate().getTime() : 0L;
+
+            if (localMs >= remoteMs) {
+                if (remoteMs == 0L) cloudSavePlayerDebounced();
+                cb.onResult(false);
+                return;
+            }
+
+            try {
+                Map<String, Object> data = snap.getData();
+                if (data == null) { cb.onResult(false); return; }
+
+                String json = gson.toJson(data);
+                PlayerCharacter cloudPc = gson.fromJson(json, PlayerCharacter.class);
+
+                if (cloudPc != null) {
+                    if (cloudPc.bag == null) cloudPc.bag = new HashMap<>();
+                    if (cloudPc.equipment == null) cloudPc.equipment = new EnumMap<>(EquipmentSlot.class);
+                    if (cloudPc.skills == null) cloudPc.skills = new EnumMap<>(SkillId.class);
+                    if (cloudPc.currencies == null) cloudPc.currencies = new HashMap<>();
+                    if (cloudPc.base == null) cloudPc.base = new Stats(12, 6, 0.0, 100, 0.05, 1.5);
+
+                    cloudPc.migrateSkillsToXpIfNeeded();
+
+                    if (cloudPc.base.health <= 0) cloudPc.base.health = 100;
+                    if (cloudPc.base.critMultiplier < 1.0) cloudPc.base.critMultiplier = 1.5;
+                    if (cloudPc.base.critChance < 0) cloudPc.base.critChance = 0;
+                    if (cloudPc.base.critChance > 1) cloudPc.base.critChance = 1;
+
+                    cloudPc.normalizeCurrencies();
+                    player = cloudPc;
+
+                    sp.edit().putString(KEY_PLAYER, gson.toJson(player)).apply();
+                    sp.edit().putLong(KEY_LOCAL_UPDATED_AT, remoteMs).apply();
+
+                    publishCurrencies();
+                    publishHp();
+                    loadSlayerFromSpIfPresent();
+                    cb.onResult(true);
+                } else {
+                    cb.onResult(false);
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Failed to merge cloud -> local", t);
+                cb.onResult(false);
+            }
+        }).addOnFailureListener(e -> {
+            Log.w(TAG, "loadFromCloudIfNewer failed", e);
+            cb.onResult(false);
+        });
+    }
+
+    public void forcePullFromCloud(@NonNull BoolCallback cb) {
+        DocumentReference doc = charDoc();
+        if (doc == null) { cb.onResult(false); return; }
+        doc.get().addOnSuccessListener(snap -> {
+            if (snap == null || !snap.exists()) { cb.onResult(false); return; }
+            try {
+                Map<String,Object> data = snap.getData();
+                if (data == null) { cb.onResult(false); return; }
+                String json = gson.toJson(data);
+                PlayerCharacter cloudPc = gson.fromJson(json, PlayerCharacter.class);
+
+                if (cloudPc != null) {
+                    if (cloudPc.bag == null) cloudPc.bag = new HashMap<>();
+                    if (cloudPc.equipment == null) cloudPc.equipment = new EnumMap<>(EquipmentSlot.class);
+                    if (cloudPc.skills == null) cloudPc.skills = new EnumMap<>(SkillId.class);
+                    if (cloudPc.currencies == null) cloudPc.currencies = new HashMap<>();
+                    if (cloudPc.base == null) cloudPc.base = new Stats(12, 6, 0.0, 100, 0.05, 1.5);
+
+                    cloudPc.migrateSkillsToXpIfNeeded();
+                    cloudPc.normalizeCurrencies();
+
+                    player = cloudPc;
+                    sp.edit().putString(KEY_PLAYER, gson.toJson(player)).apply();
+
+                    Timestamp ts = snap.getTimestamp("updatedAt");
+                    long remoteMs = (ts != null) ? ts.toDate().getTime() : System.currentTimeMillis();
+                    sp.edit().putLong(KEY_LOCAL_UPDATED_AT, remoteMs).apply();
+
+                    publishCurrencies();
+                    publishHp();
+                    loadSlayerFromSpIfPresent();
+                    cb.onResult(true);
+                } else {
+                    cb.onResult(false);
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "forcePullFromCloud failed", t);
+                cb.onResult(false);
+            }
+        }).addOnFailureListener(e -> {
+            Log.w(TAG, "forcePullFromCloud get failed", e);
+            cb.onResult(false);
+        });
+    }
 }
