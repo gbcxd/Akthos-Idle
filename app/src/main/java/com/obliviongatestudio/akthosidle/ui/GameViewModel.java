@@ -9,15 +9,15 @@ import androidx.lifecycle.MutableLiveData;
 
 import com.obliviongatestudio.akthosidle.data.dtos.InventoryItem;
 import com.obliviongatestudio.akthosidle.data.repo.GameRepository;
+import com.obliviongatestudio.akthosidle.domain.model.Action;
 import com.obliviongatestudio.akthosidle.domain.model.EquipmentSlot;
+import com.obliviongatestudio.akthosidle.domain.model.Item;
 import com.obliviongatestudio.akthosidle.domain.model.PlayerCharacter;
+import com.obliviongatestudio.akthosidle.domain.model.Recipe;
 import com.obliviongatestudio.akthosidle.domain.model.SkillId;
 import com.obliviongatestudio.akthosidle.domain.model.SlayerAssignment;
-import com.obliviongatestudio.akthosidle.engine.CombatEngine;
 import com.obliviongatestudio.akthosidle.engine.ActionEngine;
-import com.obliviongatestudio.akthosidle.domain.model.Action;
-
-import com.obliviongatestudio.akthosidle.domain.model.Recipe;
+import com.obliviongatestudio.akthosidle.engine.CombatEngine;
 
 import java.util.List;
 
@@ -68,7 +68,58 @@ public class GameViewModel extends AndroidViewModel {
 
     // ===== Food & Potions =====
     public List<InventoryItem> getFoodItems() { return repo.getFoodItems(); }
-    public void consumeFood(String foodId) { repo.consumeFood(foodId); }
+    public void consumeFood(String foodId) {
+        // Use 'this.player()' to call the GameViewModel's player() method
+        PlayerCharacter currentPlayer = this.player(); // Corrected: use local player() method
+
+        // getItem from the repo, which now delegates to ItemRepository
+        Item foodItem = repo.getItem(foodId);
+
+        // Check using .heal (singular)
+        if (currentPlayer == null || foodItem == null || foodItem.heal == null || foodItem.heal <= 0) {
+            // Log or toast if appropriate, e.g.,
+            // repo.toast("Cannot use this item or it provides no healing.");
+            return;
+        }
+
+        Integer currentQuantity = currentPlayer.bag.get(foodId);
+        if (currentQuantity == null || currentQuantity <= 0) {
+            // repo.toast("Out of " + repo.itemName(foodId));
+            return;
+        }
+
+        int maxHp = currentPlayer.totalStats(repo.gearStats(currentPlayer)).health;
+        int currentHpVal = (currentPlayer.currentHp == null) ? maxHp : currentPlayer.currentHp;
+
+        if (currentHpVal >= maxHp && foodItem.heal > 0) { // Only prevent if it would heal
+            repo.toast("Already at full health!");
+            // Decide if you still consume the item. For now, let's say no if it's purely for healing.
+            return;
+        }
+
+        // The actual consumption and HP update is now better handled in GameRepository.consumeFood
+        // So, GameViewModel can just delegate the call.
+        repo.consumeFood(foodId);
+
+        // The lines below were for direct manipulation in ViewModel,
+        // but it's cleaner if GameRepository's consumeFood handles these details
+        // and updates its LiveData.
+
+        // // 1. Consume the item (already done in repo.consumeFood)
+         currentPlayer.bag.put(foodId, currentQuantity - 1);
+         if (currentPlayer.bag.get(foodId) <= 0) {
+            currentPlayer.bag.remove(foodId);
+         }
+
+        // // 2. Heal the player (already done in repo.consumeFood)
+         int newHp = Math.min(maxHp, currentHpVal + foodItem.heal);
+
+         if (newHp != currentHpVal) {
+             currentPlayer.currentHp = newHp;
+            repo.updatePlayerHp(newHp); // This should be triggered by repo.consumeFood internally
+         }
+         repo.updatePlayerInventory(currentPlayer.bag); // Also by repo.consumeFood
+    }
     public String getQuickFoodId() { return repo.loadOrCreatePlayer().getQuickFoodId(); }
     public void setQuickFoodId(String id) { repo.loadOrCreatePlayer().setQuickFoodId(id); repo.save(); }
 

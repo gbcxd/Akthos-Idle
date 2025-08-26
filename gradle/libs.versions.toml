@@ -17,6 +17,7 @@ googleGmsGoogleServices = "4.4.3"
 credentials = "1.5.0"
 credentialsPlayServicesAuth = "1.5.0"
 googleid = "1.1.1"
+media3Common = "1.8.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -35,6 +36,7 @@ firebase-auth = { group = "com.google.firebase", name = "firebase-auth", version
 credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
 credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentialsPlayServicesAuth" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
+media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3Common" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

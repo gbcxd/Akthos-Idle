@@ -60,11 +60,15 @@ dependencies {
     implementation(libs.credentials)
     implementation(libs.credentials.play.services.auth)
     implementation(libs.googleid)
+    implementation(libs.media3.common)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
     implementation("androidx.navigation:navigation-fragment-ktx:2.7.7")
     implementation("androidx.navigation:navigation-ui-ktx:2.7.7")
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("com.google.firebase:firebase-bom:33.2.0")
+    implementation ("com.google.firebase:firebase-bom:<latest>")
+    implementation ("com.google.firebase:firebase-auth")
+    implementation ("com.google.android.gms:play-services-auth:21.2.0")
 
 
     // --- Unit test (local JVM) ---

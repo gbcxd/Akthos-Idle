@@ -8,6 +8,8 @@ import java.util.Map;
 
 public class PlayerCharacter {
     // --- persisted fields ---
+
+    public int currentHp;
     public Map<String, Integer> bag = new HashMap<>();
     public EnumMap<EquipmentSlot, String> equipment = new EnumMap<>(EquipmentSlot.class);
 
@@ -19,7 +21,15 @@ public class PlayerCharacter {
 
     public Map<String, Long> currencies = new HashMap<>();
     public Stats base = new Stats(12, 6, 0.0, 100, 0.05, 1.5);
-    public Integer currentHp;
+    public int getCurrentHp;
+
+    public int getCurrentHp() {
+        return currentHp;
+    }
+    public void setCurrentHp(int newHp) {
+        this.currentHp = newHp;
+        // You might want to add logic here to ensure HP doesn't go below 0 or above max HP
+    }
     private String quickFoodId;
 
     // --- config ---
@@ -37,6 +47,9 @@ public class PlayerCharacter {
         if (!currencies.containsKey("gold"))   currencies.put("gold",   0L);
         if (!currencies.containsKey("silver")) currencies.put("silver", 0L);
     }
+
+
+
     public long getCurrency(String id) { return currencies.getOrDefault(id, 0L); }
     public void addCurrency(String id, long amount) { currencies.put(id, getCurrency(id) + amount); }
     public boolean spendCurrency(String id, long amount) {
@@ -137,8 +150,13 @@ public class PlayerCharacter {
 
         // Clamp current HP to new max
         int maxHp = Math.max(1, out.health);
-        if (currentHp == null) currentHp = maxHp;
-        if (currentHp > maxHp) currentHp = maxHp;
+        if (currentHp > maxHp) {
+            currentHp = maxHp;
+        }
+        // Also, ensure currentHp is not negative if other logic could cause that.
+        if (currentHp < 0) {
+            currentHp = 0; // Or handle defeat appropriately
+        }
 
         return out;
     }

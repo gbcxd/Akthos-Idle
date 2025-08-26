@@ -1,9 +1,11 @@
 package com.obliviongatestudio.akthosidle;
 
+import static java.lang.Thread.sleep;
+
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
-import android.widget.ProgressBar;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -14,26 +16,26 @@ import androidx.annotation.WorkerThread;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.splashscreen.SplashScreen;
 
+import com.google.android.material.progressindicator.LinearProgressIndicator;
+
 import com.obliviongatestudio.akthosidle.data.repo.GameRepository;
 import com.obliviongatestudio.akthosidle.data.seed.GameSeedImporter;
-import com.obliviongatestudio.akthosidle.ui.auth.AuthActivity; // <-- make sure this exists
+import com.obliviongatestudio.akthosidle.ui.auth.AuthActivity;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
 public class SplashActivity extends AppCompatActivity {
 
-    private ProgressBar progressBar;
+    private LinearProgressIndicator progressBar;
     private TextView tvPercent;
 
     private GameRepository repo;
     private FirebaseAuth mAuth;
 
-    // Controls the Android 12+ splash persistence
     private volatile boolean isLoading = true;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
-        // Android 12+ system splash
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             SplashScreen splash = SplashScreen.installSplashScreen(this);
             splash.setKeepOnScreenCondition(() -> isLoading);
@@ -43,6 +45,10 @@ public class SplashActivity extends AppCompatActivity {
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_splash);
 
+        // Fade in the key art for a nice touch
+        ImageView art = findViewById(R.id.imgKeyArt);
+        if (art != null) { art.setAlpha(0f); art.animate().alpha(1f).setDuration(500).start(); }
+
         progressBar = findViewById(R.id.progress_bar);
         tvPercent   = findViewById(R.id.tvPercent);
         updateProgress(0);
@@ -50,26 +56,18 @@ public class SplashActivity extends AppCompatActivity {
         mAuth = FirebaseAuth.getInstance();
         repo  = new GameRepository(getApplicationContext());
 
-        // Start background loading work
         new Thread(this::loadAndRoute, "SplashLoader").start();
     }
 
-    // -------------------------
-    // Loading sequence + routing
-    // -------------------------
     @WorkerThread
     private void loadAndRoute() {
         try {
-            step(10, () -> GameSeedImporter.importAll(SplashActivity.this, repo));
-            step(25, () -> repo.loadItemsFromAssets());
-            step(45, () -> repo.loadActionsFromAssets());
-            step(70, () -> {
-                repo.loadDefinitions();
-                repo.loadOrCreatePlayer();
-            });
-            step(85, () -> repo.totalStats());
+            step(10, () -> GameSeedImporter.importAll(SplashActivity.this, repo)); sleep(1500);
+            step(30, repo::loadItemsFromAssets); sleep(1500);
+            step(55, repo::loadActionsFromAssets); sleep(1500);
+            step(75, () -> { repo.loadDefinitions(); repo.loadOrCreatePlayer(); }); sleep(300);
+            step(90, repo::totalStats);
             step(100, () -> { /* done */ });
-
         } catch (Throwable t) {
             t.printStackTrace();
             runOnUiThread(() ->
@@ -77,17 +75,13 @@ public class SplashActivity extends AppCompatActivity {
             );
         }
 
-        // Decide destination based on auth state
         FirebaseUser currentUser = mAuth.getCurrentUser();
-        Class<?> next = (currentUser != null)
-                ? MainActivity.class                  // user is signed in → game
-                : AuthActivity.class;                 // not signed in → auth flow
+        Class<?> next = (currentUser != null) ? MainActivity.class : AuthActivity.class;
 
-        // Release the 12+ splash and navigate
         isLoading = false;
         runOnUiThread(() -> {
             startActivity(new Intent(SplashActivity.this, next));
-            finish(); // prevent back to splash
+            finish();
         });
     }
 
@@ -95,11 +89,12 @@ public class SplashActivity extends AppCompatActivity {
     private void step(int targetPercent, Runnable work) {
         if (work != null) work.run();
         updateProgress(targetPercent);
+        try { sleep(180); } catch (InterruptedException ignored) {}
     }
 
     @MainThread
     private void setProgressUi(int p) {
-        if (progressBar != null) progressBar.setProgress(p);
+        if (progressBar != null) progressBar.setProgressCompat(p, true);
         if (tvPercent != null) tvPercent.setText(p + "%");
     }
 

@@ -2,7 +2,10 @@
     <style name="Theme.AkthosIdle" parent="Theme.Material3.DayNight.NoActionBar" />
 
     <!-- Fallback for API < 31 -->
-    <style name="Theme.AkthosIdle.Splash" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="android:windowBackground">@color/black</item>
+
+    <style name="Theme.AkthosIdle.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/black</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.AkthosIdle</item>
     </style>
 </resources>

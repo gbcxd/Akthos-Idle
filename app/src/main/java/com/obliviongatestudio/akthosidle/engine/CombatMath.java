@@ -34,4 +34,5 @@ public final class CombatMath {
         Double v = row.get(def);
         return v != null ? v : 1.0;
     }
+
 }

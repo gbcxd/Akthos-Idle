@@ -2,52 +2,55 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/black">
+    android:background="@drawable/splash_background">
 
-    <!-- Center logo -->
+    <!-- Full-bleed key art -->
     <ImageView
-        android:id="@+id/logo"
-        android:layout_width="200dp"
-        android:layout_height="200dp"
-        android:src="@drawable/ic_company_logo"
-        android:contentDescription="@string/app_name"
+        android:id="@+id/imgKeyArt"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:src="@drawable/splash_keyart"
+        android:scaleType="centerCrop"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/progress_bar"
+        app:layout_constraintBottom_toTopOf="@+id/bottomContainer"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginBottom="32dp" />
+        app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- Horizontal ProgressBar -->
-    <ProgressBar
-        android:id="@+id/progress_bar"
-        style="?android:attr/progressBarStyleHorizontal"
+    <!-- Bottom loader strip -->
+    <LinearLayout
+        android:id="@+id/bottomContainer"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:max="100"
-        android:progress="0"
-        android:progressTint="@color/white"
-        android:indeterminate="false"
-        app:layout_constraintTop_toBottomOf="@id/logo"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/tvPercent"
-        android:layout_marginHorizontal="32dp"
-        android:layout_marginTop="16dp" />
-
-    <!-- Percentage label -->
-    <TextView
-        android:id="@+id/tvPercent"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="0%"
-        android:textColor="@android:color/white"
-        android:textSize="16sp"
-        app:layout_constraintTop_toBottomOf="@id/progress_bar"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="32dp"
+        android:background="@android:color/transparent"
         app:layout_constraintBottom_toBottomOf="parent"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="32dp"/>
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progress_bar"
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
+            android:progress="0"
+            android:max="100"
+            app:trackCornerRadius="8dp"/>
+
+        <TextView
+            android:id="@+id/tvPercent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="0%"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/white"/>
+    </LinearLayout>
+
 </androidx.constraintlayout.widget.ConstraintLayout>
