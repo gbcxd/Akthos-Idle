@@ -21,6 +21,11 @@ import com.obliviongatestudio.akthosidle.domain.model.AiBehavior;
 
 
 import com.obliviongatestudio.akthosidle.domain.model.Element;
+import com.obliviongatestudio.akthosidle.domain.model.AiBehavior;
+
+
+import com.obliviongatestudio.akthosidle.domain.model.Element;
+
 
 
 import java.util.ArrayList;
@@ -56,6 +61,19 @@ public class CombatEngine {
     private static class DamageResult {
         final int dmg; final boolean crit;
         DamageResult(int d, boolean c){ this.dmg=d; this.crit=c; }
+    }
+
+    /**
+     * Calculates raw damage and critical results for an attack.
+     * Placed near the top of the class to avoid visibility issues that caused
+     * compilation errors in some environments.
+     */
+    private DamageResult damageRollEx(int atk, int def, double critC, double critM) {
+        int base = Math.max(1, atk - (int) (def * 0.6));
+        int roll = (int) Math.round(base * (0.85 + rng.nextDouble() * 0.3));
+        boolean crit = rng.nextDouble() < critC;
+        if (crit) roll = (int) Math.round(roll * Math.max(1.25, critM));
+        return new DamageResult(Math.max(1, roll), crit);
     }
 
     private final GameRepository repo;
@@ -181,6 +199,11 @@ public class CombatEngine {
         pAtkItv = Math.max(0.6, 2.5 - clamp01(pStats.speed) * 2.5) * pSlowMult;
         mAtkItv = Math.max(0.6, 2.5 - clamp01(mStats.speed) * 2.5) * mSlowMult;
 
+
+        if (!pStunned) pTimer += deltaSec; else pTimer = 0;
+        if (!mStunned && monsterCanAttack) mTimer += deltaSec; else mTimer = 0;
+
+
         if (!pStunned) pTimer += deltaSec; else pTimer = 0;
         if (!mStunned && monsterCanAttack) mTimer += deltaSec; else mTimer = 0;
 
@@ -205,8 +228,14 @@ public class CombatEngine {
             int finalDmg = CombatMath.applyElementMod(res.dmg, ElementalSystem.modifier(pElement, mElement));
             s.monsterHp = Math.max(0, s.monsterHp - finalDmg);
             logLine("You hit " + s.monsterName + " for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
+
+
+            int finalDmg = CombatMath.applyElementMod(res.dmg, ElementalSystem.modifier(pElement, mElement));
+            s.monsterHp = Math.max(0, s.monsterHp - finalDmg);
+            logLine("You hit " + s.monsterName + " for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
             s.monsterHp = Math.max(0, s.monsterHp - res.dmg);
             logLine("You hit " + s.monsterName + " for " + res.dmg + (res.crit ? " (CRIT!)" : ""));
+
 
 
             if (rng.nextDouble() < BURN_APPLY_CHANCE) {
@@ -219,7 +248,6 @@ public class CombatEngine {
         updateEffects(monsterEffects, false, deltaSec, s);
         updateEffects(playerEffects, true, deltaSec, s);
 
-
         if (monsterCanAttack) {
             while (mTimer >= mAtkItv && s.playerHp > 0) {
                 mTimer -= mAtkItv;
@@ -230,6 +258,7 @@ public class CombatEngine {
                 logLine(s.monsterName + " hits you for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
             }
 
+
         while (mTimer >= mAtkItv && s.playerHp > 0) {
             mTimer -= mAtkItv;
             DamageResult res = damageRollEx(mStats.attack, pStats.defense,
@@ -237,6 +266,7 @@ public class CombatEngine {
             int finalDmg = CombatMath.applyElementMod(res.dmg, ElementalSystem.modifier(mElement, pElement));
             s.playerHp = Math.max(0, s.playerHp - finalDmg);
             logLine(s.monsterName + " hits you for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
+
 
         }
 
@@ -278,14 +308,6 @@ public class CombatEngine {
 
         state.setValue(s);
         loop();
-    }
-
-    private DamageResult damageRollEx(int atk, int def, double critC, double critM) {
-        int base = Math.max(1, atk - (int) (def * 0.6));
-        int roll = (int) Math.round(base * (0.85 + rng.nextDouble() * 0.3));
-        boolean crit = rng.nextDouble() < critC;
-        if (crit) roll = (int) Math.round(roll * Math.max(1.25, critM));
-        return new DamageResult(Math.max(1, roll), crit);
     }
 
     /** Overload so old one-arg calls won’t break if they resurface. */
