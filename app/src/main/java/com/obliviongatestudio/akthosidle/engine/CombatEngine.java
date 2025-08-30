@@ -14,6 +14,9 @@ import com.obliviongatestudio.akthosidle.domain.model.Monster;
 import com.obliviongatestudio.akthosidle.domain.model.PlayerCharacter;
 import com.obliviongatestudio.akthosidle.domain.model.SkillId;
 import com.obliviongatestudio.akthosidle.domain.model.Stats;
+import com.obliviongatestudio.akthosidle.domain.model.StatusEffect;
+import com.obliviongatestudio.akthosidle.domain.model.Element;
+import com.obliviongatestudio.akthosidle.domain.model.AiBehavior;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,9 +41,9 @@ public class CombatEngine {
         public float playerAttackInterval;
         public float monsterAttackInterval;
 
-        // 🔥 Burn status (on monster)
-        public int burnStacksOnMonster;
-        public float burnRemainingSec;
+        /** Active status effects for UI display */
+        public List<StatusEffect> playerEffects = new ArrayList<>();
+        public List<StatusEffect> monsterEffects = new ArrayList<>();
 
         public boolean running;
     }
@@ -68,20 +71,18 @@ public class CombatEngine {
     private Stats pStats, mStats;
     private Monster monster;
     private PlayerCharacter pc;
+    private Element pElement = Element.NEUTRAL, mElement = Element.NEUTRAL;
 
     // cache current intervals (seconds) for progress calculation
     private double pAtkItv = 2.5, mAtkItv = 2.5;
 
-    // 🔥 Burn constants
+    // Example burn effect constants (player applies to monster)
     private static final double BURN_APPLY_CHANCE = 0.25;
-    private static final int    BURN_MAX_STACKS   = 5;
     private static final double BURN_DURATION_SEC = 5.0;
-    private static final int    BURN_DMG_PER_TICK_PER_STACK = 2;
+    private static final int    BURN_DMG_PER_TICK = 2;
 
-    // Burn runtime (monster)
-    private int burnStacks = 0;
-    private double burnRemainSec = 0.0;
-    private double burnTickAcc = 0.0;
+    private final List<StatusEffect> playerEffects = new ArrayList<>();
+    private final List<StatusEffect> monsterEffects = new ArrayList<>();
 
     public CombatEngine(GameRepository repo) {
         this.repo = repo;
@@ -99,6 +100,8 @@ public class CombatEngine {
 
         this.pStats = (pc != null) ? pc.totalStats(repo.gearStats(pc)) : new Stats();
         this.mStats = (monster.stats != null) ? monster.stats : new Stats();
+        this.pElement = (pc != null && pc.element != null) ? pc.element : Element.NEUTRAL;
+        this.mElement = (monster.element != null) ? monster.element : Element.NEUTRAL;
 
         BattleState s = new BattleState();
         s.monsterId = monsterId;
@@ -115,8 +118,10 @@ public class CombatEngine {
         s.playerAttackInterval = 0f;
         s.monsterAttackInterval = 0f;
 
-        burnStacks = 0; burnRemainSec = 0.0; burnTickAcc = 0.0;
-        s.burnStacksOnMonster = 0; s.burnRemainingSec = 0f;
+        playerEffects.clear();
+        monsterEffects.clear();
+        s.playerEffects = new ArrayList<>();
+        s.monsterEffects = new ArrayList<>();
 
         s.running = true;
         state.setValue(s);
@@ -161,43 +166,44 @@ public class CombatEngine {
         double deltaSec = Math.max(0, (now - lastTickMs) / 1000.0);
         lastTickMs = now;
 
-        pAtkItv = Math.max(0.6, 2.5 - clamp01(pStats.speed) * 2.5);
-        mAtkItv = Math.max(0.6, 2.5 - clamp01(mStats.speed) * 2.5);
+        double pSlowMult = 1.0 + totalSlow(playerEffects);
+        double mSlowMult = 1.0 + totalSlow(monsterEffects);
+        boolean pStunned = hasStun(playerEffects);
+        boolean mStunned = hasStun(monsterEffects);
+        boolean monsterCanAttack = monster != null && monster.behavior != AiBehavior.PASSIVE;
 
-        pTimer += deltaSec;
-        mTimer += deltaSec;
+        pAtkItv = Math.max(0.6, 2.5 - clamp01(pStats.speed) * 2.5) * pSlowMult;
+        mAtkItv = Math.max(0.6, 2.5 - clamp01(mStats.speed) * 2.5) * mSlowMult;
+
+        if (!pStunned) pTimer += deltaSec; else pTimer = 0;
+        if (!mStunned && monsterCanAttack) mTimer += deltaSec; else mTimer = 0;
 
         while (pTimer >= pAtkItv && s.monsterHp > 0) {
             pTimer -= pAtkItv;
             DamageResult res = damageRollEx(pStats.attack, mStats.defense,
                     clamp01(pStats.critChance), Math.max(1.0, pStats.critMultiplier));
-            s.monsterHp = Math.max(0, s.monsterHp - res.dmg);
-            logLine("You hit " + s.monsterName + " for " + res.dmg + (res.crit ? " (CRIT!)" : ""));
-        }
-
-        // 🔥 Burn tick
-        if (burnStacks > 0 && s.monsterHp > 0) {
-            burnRemainSec = Math.max(0.0, burnRemainSec - deltaSec);
-            burnTickAcc += deltaSec;
-            while (burnTickAcc >= 1.0 && burnRemainSec > 0.0 && s.monsterHp > 0) {
-                int burnDmg = burnStacks * BURN_DMG_PER_TICK_PER_STACK;
-                s.monsterHp = Math.max(0, s.monsterHp - burnDmg);
-                burnTickAcc -= 1.0;
-                logLine("Burn tick: -" + burnDmg + " HP (" + burnStacks + " stacks)");
-            }
-            if (burnRemainSec == 0.0) {
-                burnStacks = 0;
-                burnTickAcc = 0.0;
-                logLine("Burn expired");
+            int finalDmg = CombatMath.applyElementMod(res.dmg, ElementalSystem.modifier(pElement, mElement));
+            s.monsterHp = Math.max(0, s.monsterHp - finalDmg);
+            logLine("You hit " + s.monsterName + " for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
+            if (rng.nextDouble() < BURN_APPLY_CHANCE) {
+                monsterEffects.add(new StatusEffect(StatusEffect.Type.DOT, BURN_DURATION_SEC, BURN_DMG_PER_TICK));
+                logLine("Burn applied");
             }
         }
 
-        while (mTimer >= mAtkItv && s.playerHp > 0) {
-            mTimer -= mAtkItv;
-            DamageResult res = damageRollEx(mStats.attack, pStats.defense,
-                    clamp01(mStats.critChance), Math.max(1.0, mStats.critMultiplier));
-            s.playerHp = Math.max(0, s.playerHp - res.dmg);
-            logLine(s.monsterName + " hits you for " + res.dmg + (res.crit ? " (CRIT!)" : ""));
+        // update ongoing effects
+        updateEffects(monsterEffects, false, deltaSec, s);
+        updateEffects(playerEffects, true, deltaSec, s);
+
+        if (monsterCanAttack) {
+            while (mTimer >= mAtkItv && s.playerHp > 0) {
+                mTimer -= mAtkItv;
+                DamageResult res = damageRollEx(mStats.attack, pStats.defense,
+                        clamp01(mStats.critChance), Math.max(1.0, mStats.critMultiplier));
+                int finalDmg = CombatMath.applyElementMod(res.dmg, ElementalSystem.modifier(mElement, pElement));
+                s.playerHp = Math.max(0, s.playerHp - finalDmg);
+                logLine(s.monsterName + " hits you for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
+            }
         }
 
         // defeat/victory
@@ -222,8 +228,8 @@ public class CombatEngine {
             s.monsterAttackProgress = (float) Math.min(1.0, mTimer / mAtkItv);
             s.playerAttackInterval = (float) pAtkItv;
             s.monsterAttackInterval = (float) mAtkItv;
-            s.burnStacksOnMonster = burnStacks;
-            s.burnRemainingSec = (float) burnRemainSec;
+            s.playerEffects = copyEffects(playerEffects);
+            s.monsterEffects = copyEffects(monsterEffects);
             state.setValue(s);
             return;
         }
@@ -233,8 +239,8 @@ public class CombatEngine {
         s.playerAttackInterval = (float) pAtkItv;
         s.monsterAttackInterval = (float) mAtkItv;
 
-        s.burnStacksOnMonster = burnStacks;
-        s.burnRemainingSec = (float) burnRemainSec;
+        s.playerEffects = copyEffects(playerEffects);
+        s.monsterEffects = copyEffects(monsterEffects);
 
         state.setValue(s);
         loop();
@@ -284,6 +290,55 @@ public class CombatEngine {
         }
 
         repo.save();
+    }
+
+    private void updateEffects(List<StatusEffect> list, boolean onPlayer, double deltaSec, BattleState s) {
+        for (int i = list.size() - 1; i >= 0; i--) {
+            StatusEffect e = list.get(i);
+            e.remaining -= deltaSec;
+            if (e.type == StatusEffect.Type.DOT || e.type == StatusEffect.Type.HOT) {
+                e.tickAcc += deltaSec;
+                while (e.tickAcc >= 1.0 && e.remaining > 0) {
+                    int amt = (int) Math.round(e.value);
+                    if (e.type == StatusEffect.Type.DOT) {
+                        if (onPlayer) {
+                            s.playerHp = Math.max(0, s.playerHp - amt);
+                        } else {
+                            s.monsterHp = Math.max(0, s.monsterHp - amt);
+                        }
+                        logLine((onPlayer ? "You" : s.monsterName) + " suffer " + amt + " damage");
+                    } else {
+                        if (onPlayer) {
+                            s.playerHp = Math.min(s.playerMaxHp, s.playerHp + amt);
+                        } else {
+                            s.monsterHp = Math.min(s.monsterMaxHp, s.monsterHp + amt);
+                        }
+                        logLine((onPlayer ? "You" : s.monsterName) + " heal " + amt);
+                    }
+                    e.tickAcc -= 1.0;
+                }
+            }
+            if (e.remaining <= 0) {
+                list.remove(i);
+            }
+        }
+    }
+
+    private double totalSlow(List<StatusEffect> list) {
+        double t = 0.0;
+        for (StatusEffect e : list) if (e.type == StatusEffect.Type.SLOW) t += e.value;
+        return t;
+    }
+
+    private boolean hasStun(List<StatusEffect> list) {
+        for (StatusEffect e : list) if (e.type == StatusEffect.Type.STUN) return true;
+        return false;
+    }
+
+    private List<StatusEffect> copyEffects(List<StatusEffect> src) {
+        List<StatusEffect> out = new ArrayList<>();
+        for (StatusEffect e : src) out.add(e.copy());
+        return out;
     }
 
     private static double clamp01(double v) {

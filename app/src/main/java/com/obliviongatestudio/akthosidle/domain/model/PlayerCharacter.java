@@ -6,6 +6,8 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.obliviongatestudio.akthosidle.domain.model.Element;
+
 public class PlayerCharacter {
     // --- persisted fields ---
 
@@ -21,6 +23,8 @@ public class PlayerCharacter {
 
     public Map<String, Long> currencies = new HashMap<>();
     public Stats base = new Stats(12, 6, 0.0, 100, 0.05, 1.5);
+    /** Elemental affinity for the player. */
+    public Element element = Element.NEUTRAL;
     public int getCurrentHp;
 
     public int getCurrentHp() {
