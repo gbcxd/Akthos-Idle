@@ -11,5 +11,7 @@ public enum EquipmentSlot {
     BOW,
     PANTS,
     RING,   // single ring
-    BOOTS
+    BOOTS,
+    TOOL,
+    BLESSING
 }
