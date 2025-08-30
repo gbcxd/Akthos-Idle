@@ -35,4 +35,9 @@ public final class CombatMath {
         return v != null ? v : 1.0;
     }
 
+    /** Apply a precomputed element modifier to a damage value. */
+    public static int applyElementMod(int dmg, double mod) {
+        return (int)Math.round(dmg * mod);
+    }
+
 }

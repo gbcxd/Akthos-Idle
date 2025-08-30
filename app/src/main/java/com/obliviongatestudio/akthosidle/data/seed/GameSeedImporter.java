@@ -31,7 +31,9 @@ public final class GameSeedImporter {
                 Log.w(TAG, "No monsters.vN.json found under assets/game");
             }
 
-            // TODO (optional later): items, actions, currencies likewise
+            // Items and actions
+            repo.loadItemsFromAssets();
+            repo.loadActionsFromAssets();
 
         } catch (Exception e) {
             Log.e(TAG, "Seeding failed", e);
