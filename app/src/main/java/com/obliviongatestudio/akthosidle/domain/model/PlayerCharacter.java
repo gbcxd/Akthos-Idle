@@ -26,6 +26,9 @@ public class PlayerCharacter {
     /** Elemental affinity for the player. */
     public Element element = Element.NEUTRAL;
 
+    public int getCurrentHp;
+
+
     public int getCurrentHp() {
         return currentHp;
     }

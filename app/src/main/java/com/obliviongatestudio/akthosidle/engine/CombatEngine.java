@@ -15,8 +15,23 @@ import com.obliviongatestudio.akthosidle.domain.model.PlayerCharacter;
 import com.obliviongatestudio.akthosidle.domain.model.SkillId;
 import com.obliviongatestudio.akthosidle.domain.model.Stats;
 import com.obliviongatestudio.akthosidle.domain.model.StatusEffect;
+
 import com.obliviongatestudio.akthosidle.domain.model.Element;
 import com.obliviongatestudio.akthosidle.domain.model.AiBehavior;
+
+
+import com.obliviongatestudio.akthosidle.domain.model.Element;
+import com.obliviongatestudio.akthosidle.domain.model.AiBehavior;
+
+
+import com.obliviongatestudio.akthosidle.domain.model.Element;
+import com.obliviongatestudio.akthosidle.domain.model.AiBehavior;
+
+
+import com.obliviongatestudio.akthosidle.domain.model.Element;
+
+
+
 
 import java.util.ArrayList;
 import java.util.List;
@@ -183,21 +198,63 @@ public class CombatEngine {
         double mSlowMult = 1.0 + totalSlow(monsterEffects);
         boolean pStunned = hasStun(playerEffects);
         boolean mStunned = hasStun(monsterEffects);
+
         boolean monsterCanAttack = monster != null && monster.behavior != AiBehavior.PASSIVE;
 
         pAtkItv = Math.max(0.6, 2.5 - clamp01(pStats.speed) * 2.5) * pSlowMult;
         mAtkItv = Math.max(0.6, 2.5 - clamp01(mStats.speed) * 2.5) * mSlowMult;
 
+
         if (!pStunned) pTimer += deltaSec; else pTimer = 0;
         if (!mStunned && monsterCanAttack) mTimer += deltaSec; else mTimer = 0;
+
+
+
+        if (!pStunned) pTimer += deltaSec; else pTimer = 0;
+        if (!mStunned && monsterCanAttack) mTimer += deltaSec; else mTimer = 0;
+
+
+        if (!pStunned) pTimer += deltaSec; else pTimer = 0;
+        if (!mStunned && monsterCanAttack) mTimer += deltaSec; else mTimer = 0;
+
+
+        pAtkItv = Math.max(0.6, 2.5 - clamp01(pStats.speed) * 2.5) * pSlowMult;
+        mAtkItv = Math.max(0.6, 2.5 - clamp01(mStats.speed) * 2.5) * mSlowMult;
+
+        if (!pStunned) pTimer += deltaSec; else pTimer = 0;
+        if (!mStunned) mTimer += deltaSec; else mTimer = 0;
+
+
 
         while (pTimer >= pAtkItv && s.monsterHp > 0) {
             pTimer -= pAtkItv;
             DamageResult res = damageRollEx(pStats.attack, mStats.defense,
                     clamp01(pStats.critChance), Math.max(1.0, pStats.critMultiplier));
+
             int finalDmg = CombatMath.applyElementMod(res.dmg, ElementalSystem.modifier(pElement, mElement));
             s.monsterHp = Math.max(0, s.monsterHp - finalDmg);
             logLine("You hit " + s.monsterName + " for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
+
+
+            int finalDmg = CombatMath.applyElementMod(res.dmg, ElementalSystem.modifier(pElement, mElement));
+            s.monsterHp = Math.max(0, s.monsterHp - finalDmg);
+            logLine("You hit " + s.monsterName + " for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
+
+
+            int finalDmg = CombatMath.applyElementMod(res.dmg, ElementalSystem.modifier(pElement, mElement));
+            s.monsterHp = Math.max(0, s.monsterHp - finalDmg);
+            logLine("You hit " + s.monsterName + " for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
+
+
+            int finalDmg = CombatMath.applyElementMod(res.dmg, ElementalSystem.modifier(pElement, mElement));
+            s.monsterHp = Math.max(0, s.monsterHp - finalDmg);
+            logLine("You hit " + s.monsterName + " for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
+            s.monsterHp = Math.max(0, s.monsterHp - res.dmg);
+            logLine("You hit " + s.monsterName + " for " + res.dmg + (res.crit ? " (CRIT!)" : ""));
+
+
+
+
             if (rng.nextDouble() < BURN_APPLY_CHANCE) {
                 monsterEffects.add(new StatusEffect(StatusEffect.Type.DOT, BURN_DURATION_SEC, BURN_DMG_PER_TICK));
                 logLine("Burn applied");
@@ -217,6 +274,19 @@ public class CombatEngine {
                 s.playerHp = Math.max(0, s.playerHp - finalDmg);
                 logLine(s.monsterName + " hits you for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
             }
+
+
+
+        while (mTimer >= mAtkItv && s.playerHp > 0) {
+            mTimer -= mAtkItv;
+            DamageResult res = damageRollEx(mStats.attack, pStats.defense,
+                    clamp01(mStats.critChance), Math.max(1.0, mStats.critMultiplier));
+            int finalDmg = CombatMath.applyElementMod(res.dmg, ElementalSystem.modifier(mElement, pElement));
+            s.playerHp = Math.max(0, s.playerHp - finalDmg);
+            logLine(s.monsterName + " hits you for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
+
+
+
         }
 
         // defeat/victory
@@ -346,6 +416,7 @@ public class CombatEngine {
         return out;
     }
 
+
     /** Adds a status effect to the player. */
     public void addPlayerEffect(StatusEffect effect) {
         if (effect != null) {
@@ -460,6 +531,7 @@ public class CombatEngine {
             state.setValue(s);
         }
     }
+
 
     private static double clamp01(double v) {
         if (v < 0) return 0;
