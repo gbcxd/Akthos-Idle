@@ -10,6 +10,9 @@
 - TickService awards xp/loot for jobs
 - GameSeedImporter loads items, actions, currencies
 - Currency icons & adapter display
+- Inventory/stash management and UI polish
+- Authentication & cloud-save foundations
+- Expanded unit tests and continuous integration
 
 ## NEXT
 - SkillDetailFragment dynamic materials
@@ -20,6 +23,8 @@
 - Crafting & recipe system
 - Slayer task assignments
 - Backup include/exclude rules
+- Achievements and leaderboards
+- Localization and accessibility improvements
 
 ## LATER
 - Guilds & social
@@ -27,3 +32,4 @@
 - Procedural dungeons
 - Party + bosses (roles)
 - Prestige & titles
+- Cross-platform cloud sync
