@@ -25,14 +25,27 @@ public class PlayerCharacter {
     public Stats base = new Stats(12, 6, 0.0, 100, 0.05, 1.5);
     /** Elemental affinity for the player. */
     public Element element = Element.NEUTRAL;
+
     public int getCurrentHp;
+
 
     public int getCurrentHp() {
         return currentHp;
     }
+
     public void setCurrentHp(int newHp) {
         this.currentHp = newHp;
         // You might want to add logic here to ensure HP doesn't go below 0 or above max HP
+    }
+
+    /** Accessor for the player's elemental affinity. */
+    public Element getElement() {
+        return element;
+    }
+
+    /** Setter for the player's elemental affinity. */
+    public void setElement(Element element) {
+        this.element = element != null ? element : Element.NEUTRAL;
     }
     private String quickFoodId;
 

@@ -7,8 +7,12 @@ import com.obliviongatestudio.akthosidle.domain.model.Element;
 import com.obliviongatestudio.akthosidle.domain.model.AiBehavior;
 
 
+import com.obliviongatestudio.akthosidle.domain.model.AiBehavior;
+
+
 
 import com.obliviongatestudio.akthosidle.domain.model.AiBehavior;
+
 
 
 
@@ -26,6 +30,11 @@ public class Monster {
 
     /** Basic AI behavior mode. */
     public AiBehavior behavior = AiBehavior.AGGRESSIVE;
+
+
+    /** Basic AI behavior mode. */
+    public AiBehavior behavior = AiBehavior.AGGRESSIVE;
+
 
 
 
@@ -93,6 +102,10 @@ public class Monster {
         if (behavior == null) behavior = AiBehavior.AGGRESSIVE;
 
 
+        if (behavior == null) behavior = AiBehavior.AGGRESSIVE;
+
+
+
 
         // If legacy field has value but new field doesn't, adopt it.
         if (exp <= 0 && expReward > 0) exp = expReward;
@@ -131,5 +144,25 @@ public class Monster {
 
     public boolean hasDrops() {
         return drops != null && !drops.isEmpty();
+    }
+
+    /** Returns the monster's elemental affinity. */
+    public Element getElement() {
+        return element;
+    }
+
+    /** Sets the monster's elemental affinity. */
+    public void setElement(Element element) {
+        this.element = element != null ? element : Element.NEUTRAL;
+    }
+
+    /** Returns the monster's AI behavior mode. */
+    public AiBehavior getBehavior() {
+        return behavior;
+    }
+
+    /** Sets the monster's AI behavior mode. */
+    public void setBehavior(AiBehavior behavior) {
+        this.behavior = behavior != null ? behavior : AiBehavior.AGGRESSIVE;
     }
 }
