@@ -16,6 +16,8 @@ import com.obliviongatestudio.akthosidle.domain.model.SkillId;
 import com.obliviongatestudio.akthosidle.domain.model.Stats;
 import com.obliviongatestudio.akthosidle.domain.model.StatusEffect;
 
+import com.obliviongatestudio.akthosidle.domain.model.Element;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -69,6 +71,7 @@ public class CombatEngine {
     private Stats pStats, mStats;
     private Monster monster;
     private PlayerCharacter pc;
+    private Element pElement = Element.NEUTRAL, mElement = Element.NEUTRAL;
 
     // cache current intervals (seconds) for progress calculation
     private double pAtkItv = 2.5, mAtkItv = 2.5;
@@ -97,6 +100,8 @@ public class CombatEngine {
 
         this.pStats = (pc != null) ? pc.totalStats(repo.gearStats(pc)) : new Stats();
         this.mStats = (monster.stats != null) ? monster.stats : new Stats();
+        this.pElement = (pc != null && pc.element != null) ? pc.element : Element.NEUTRAL;
+        this.mElement = (monster.element != null) ? monster.element : Element.NEUTRAL;
 
         BattleState s = new BattleState();
         s.monsterId = monsterId;
@@ -176,8 +181,13 @@ public class CombatEngine {
             pTimer -= pAtkItv;
             DamageResult res = damageRollEx(pStats.attack, mStats.defense,
                     clamp01(pStats.critChance), Math.max(1.0, pStats.critMultiplier));
+
+            int finalDmg = CombatMath.applyElementMod(res.dmg, ElementalSystem.modifier(pElement, mElement));
+            s.monsterHp = Math.max(0, s.monsterHp - finalDmg);
+            logLine("You hit " + s.monsterName + " for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
             s.monsterHp = Math.max(0, s.monsterHp - res.dmg);
             logLine("You hit " + s.monsterName + " for " + res.dmg + (res.crit ? " (CRIT!)" : ""));
+
             if (rng.nextDouble() < BURN_APPLY_CHANCE) {
                 monsterEffects.add(new StatusEffect(StatusEffect.Type.DOT, BURN_DURATION_SEC, BURN_DMG_PER_TICK));
                 logLine("Burn applied");
@@ -192,8 +202,9 @@ public class CombatEngine {
             mTimer -= mAtkItv;
             DamageResult res = damageRollEx(mStats.attack, pStats.defense,
                     clamp01(mStats.critChance), Math.max(1.0, mStats.critMultiplier));
-            s.playerHp = Math.max(0, s.playerHp - res.dmg);
-            logLine(s.monsterName + " hits you for " + res.dmg + (res.crit ? " (CRIT!)" : ""));
+            int finalDmg = CombatMath.applyElementMod(res.dmg, ElementalSystem.modifier(mElement, pElement));
+            s.playerHp = Math.max(0, s.playerHp - finalDmg);
+            logLine(s.monsterName + " hits you for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
         }
 
         // defeat/victory
