@@ -7,29 +7,44 @@ package com.obliviongatestudio.akthosidle.domain.model;
  * without pulling in a full component system.
  */
 public class StatusEffect {
-    public enum Type { DOT, HOT, STUN, SLOW }
 
-    public final Type type;
-    /** Remaining duration in seconds. */
+    // 1. Made the enum public static and named it 'Type' (uppercase T - standard convention)
+    public static enum Type {
+        DOT,
+        HOT,
+        STUN,
+        SLOW
+    }
+
+    public final Type type;     // 2. Field type is 'Type'
     public double remaining;
-    /**
-     * Generic magnitude value. For DoT/HoT this is applied per tick (1s).
-     * For SLOW this represents a fractional slowdown (0.25 = +25% interval).
-     */
     public double value;
-    /** Internal accumulator for 1s ticks on DoT/HoT. */
     public double tickAcc;
+    public String name;         // 3. Added name field
 
-    public StatusEffect(Type type, double durationSec, double value) {
+    // 4. Constructor updated to accept a name and use 'Type'
+    public StatusEffect(String name, Type type, double durationSec, double value) {
+        this.name = name;
         this.type = type;
         this.remaining = durationSec;
         this.value = value;
         this.tickAcc = 0.0;
     }
 
+    // 5. Copy constructor updated to also copy the name
     public StatusEffect copy() {
-        StatusEffect c = new StatusEffect(this.type, this.remaining, this.value);
+        StatusEffect c = new StatusEffect(this.name, this.type, this.remaining, this.value);
         c.tickAcc = this.tickAcc;
         return c;
+    }
+
+    // 6. Getter for the name
+    public String getName() {
+        return this.name;
+    }
+
+    // Optional: Getter for the enum type name if needed directly
+    public String getTypeName() {
+        return this.type.name();
     }
 }

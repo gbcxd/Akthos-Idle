@@ -28,13 +28,6 @@ public class Monster {
     public AiBehavior behavior = AiBehavior.AGGRESSIVE;
 
 
-    /** Basic AI behavior mode. */
-    public AiBehavior behavior = AiBehavior.AGGRESSIVE;
-
-
-    /** Basic AI behavior mode. */
-    public AiBehavior behavior = AiBehavior.AGGRESSIVE;
-
 
 
 
