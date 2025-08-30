@@ -1,5 +1,6 @@
 package com.obliviongatestudio.akthosidle.ui.currency;
 
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -39,11 +40,15 @@ public class CurrencyAdapter extends RecyclerView.Adapter<CurrencyAdapter.VH> {
         InventoryItem it = data.get(pos);
         h.name.setText(it.name != null ? it.name : it.id);
         h.amount.setText(nf.format(it.quantity));
-        // TODO: if you add Currency.icon, pick drawable by name and set to h.icon
-        // e.g., h.icon.setImageResource(resIdFromName(h.icon.getContext(), "ic_silver"));
+        int resId = resIdFromName(h.icon.getContext(), "ic_" + it.id);
+        if (resId != 0) h.icon.setImageResource(resId);
     }
 
     @Override public int getItemCount() { return data.size(); }
+
+    private static int resIdFromName(Context ctx, String name) {
+        return ctx.getResources().getIdentifier(name, "drawable", ctx.getPackageName());
+    }
 
     static class VH extends RecyclerView.ViewHolder {
         ImageView icon; TextView name; TextView amount;
