@@ -5,7 +5,9 @@
 
     <!-- AndroidManifest.xml -->
     <application
-        android:theme="@style/Theme.AkthosIdle">
+        android:theme="@style/Theme.AkthosIdle"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules">
 
         <!-- LAUNCHER: full-screen splash -->
         <activity

@@ -2,11 +2,18 @@ package com.obliviongatestudio.akthosidle.domain.model;
 
 import java.util.List;
 
+import com.obliviongatestudio.akthosidle.domain.model.Element;
+import com.obliviongatestudio.akthosidle.domain.model.AiBehavior;
+
 /** Game monster definition parsed from JSON. */
 public class Monster {
     public String id;
     public String name;
     public Stats stats;          // Repo ensures default if null.
+    /** Elemental affinity used for weakness/strength calculations. */
+    public Element element = Element.NEUTRAL;
+    /** Basic AI behavior mode. */
+    public AiBehavior behavior = AiBehavior.AGGRESSIVE;
 
     public List<Drop> drops;     // Optional loot table
 
@@ -44,6 +51,12 @@ public class Monster {
         normalize();
     }
 
+    public Monster(String id, String name, Stats stats, List<Drop> drops,
+                   int exp, int silverReward, int slayerReward, Element element) {
+        this(id, name, stats, drops, exp, silverReward, slayerReward);
+        this.element = element != null ? element : Element.NEUTRAL;
+    }
+
     /** Back-compat ctor that used to pass expReward & goldReward. */
     public Monster(String id, String name, Stats stats, List<Drop> drops,
                    int expRewardLegacy, int goldRewardLegacy) {
@@ -58,6 +71,8 @@ public class Monster {
     public void normalize() {
         if (name == null) name = id;
         if (stats == null) stats = new Stats();
+        if (element == null) element = Element.NEUTRAL;
+        if (behavior == null) behavior = AiBehavior.AGGRESSIVE;
 
         // If legacy field has value but new field doesn't, adopt it.
         if (exp <= 0 && expReward > 0) exp = expReward;
