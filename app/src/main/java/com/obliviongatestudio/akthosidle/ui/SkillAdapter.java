@@ -4,6 +4,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -71,6 +72,18 @@ public class SkillAdapter extends RecyclerView.Adapter<SkillAdapter.VH> {
         h.tvName.setText(r.name);
         h.tvLevel.setText("Level " + r.level);
         h.imgIcon.setImageResource(r.iconRes);
+
+        if (r.progressMax > 0) {
+            h.pbXp.setMax(Math.max(1, r.progressMax));
+            h.pbXp.setProgress(Math.max(0, Math.min(r.progress, r.progressMax)));
+            h.tvXp.setText(r.progress + " / " + r.progressMax);
+            h.pbXp.setVisibility(View.VISIBLE);
+            h.tvXp.setVisibility(View.VISIBLE);
+        } else {
+            h.pbXp.setVisibility(View.GONE);
+            h.tvXp.setVisibility(View.GONE);
+        }
+
         h.itemView.setOnClickListener(v -> {
             if (onClick != null) onClick.onClick(r);
         });
@@ -80,12 +93,15 @@ public class SkillAdapter extends RecyclerView.Adapter<SkillAdapter.VH> {
 
     static class VH extends RecyclerView.ViewHolder {
         ImageView imgIcon;
-        TextView tvName, tvLevel;
+        TextView tvName, tvLevel, tvXp;
+        ProgressBar pbXp;
         VH(@NonNull View itemView) {
             super(itemView);
             imgIcon = itemView.findViewById(R.id.imgIcon);
             tvName  = itemView.findViewById(R.id.tvName);
             tvLevel = itemView.findViewById(R.id.tvLevel);
+            pbXp    = itemView.findViewById(R.id.pbXp);
+            tvXp    = itemView.findViewById(R.id.tvXp);
         }
     }
 }
