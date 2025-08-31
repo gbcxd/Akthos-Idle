@@ -1,5 +1,6 @@
 package com.obliviongatestudio.akthosidle.engine;
 
+import android.graphics.Color; // Added for potential direct color use, though StatusEffect handles it
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -204,6 +205,7 @@ public class CombatEngine {
             logLine("You hit " + s.monsterName + " for " + finalDmg + (res.crit ? " (CRIT!)" : ""));
 
             if (rng.nextDouble() < BURN_APPLY_CHANCE) {
+                // Using the StatusEffect constructor that infers color based on name/type
                 monsterEffects.add(new StatusEffect("Burn", StatusEffect.Type.DOT, BURN_DURATION_SEC, (double)BURN_DMG_PER_TICK));
                 logLine("Burn applied to " + s.monsterName);
             }
@@ -316,8 +318,8 @@ public class CombatEngine {
             StatusEffect e = list.get(i);
             e.remaining -= deltaSec;
 
-            // Get a descriptive name for the effect (using its Type for now)
-            String effectName = e.type.toString().toLowerCase(); // Or a more sophisticated way to get a display name
+            // Using the effect's specific name for logging now
+            String effectName = e.getName(); // Use the specific name like "Burn", "Poison"
 
             if (e.type == StatusEffect.Type.DOT || e.type == StatusEffect.Type.HOT) {
                 e.tickAcc += deltaSec;
@@ -330,25 +332,25 @@ public class CombatEngine {
                         if (onPlayer) {
                             if(s.playerHp == 0) continue; // Already defeated
                             s.playerHp = Math.max(0, s.playerHp - amt);
-                            logLine("You take " + amt + " " + effectName + " damage."); // Use effectName
+                            logLine("You take " + amt + " " + effectName.toLowerCase() + " damage."); // Use specific name
                         } else {
                             if(s.monsterHp == 0) continue; // Already defeated
                             s.monsterHp = Math.max(0, s.monsterHp - amt);
-                            logLine(s.monsterName + " takes " + amt + " " + effectName + " damage."); // Use effectName
+                            logLine(s.monsterName + " takes " + amt + " " + effectName.toLowerCase() + " damage."); // Use specific name
                         }
                     } else { // HOT
                         if (onPlayer) {
                             s.playerHp = Math.min(s.playerMaxHp, s.playerHp + amt);
-                            logLine("You heal " + amt + " from " + effectName + "."); // Use effectName
+                            logLine("You heal " + amt + " from " + effectName.toLowerCase() + "."); // Use specific name
                         } else {
                             s.monsterHp = Math.min(s.monsterMaxHp, s.monsterHp + amt);
-                            logLine(s.monsterName + " heals " + amt + " from " + effectName + "."); // Use effectName
+                            logLine(s.monsterName + " heals " + amt + " from " + effectName.toLowerCase() + "."); // Use specific name
                         }
                     }
                 }
             }
             if (e.remaining <= 0) {
-                logLine((onPlayer ? "Your" : s.monsterName + "'s") + " " + effectName + " effect wore off."); // Use effectName
+                logLine((onPlayer ? "Your" : s.monsterName + "'s") + " " + effectName.toLowerCase() + " effect wore off."); // Use specific name
                 list.remove(i);
             }
         }
@@ -373,13 +375,9 @@ public class CombatEngine {
 
     public void addPlayerEffect(StatusEffect effect) {
         if (effect != null) {
-            StatusEffect effectCopy = effect.copy(); // Add a copy to prevent external modification
+            StatusEffect effectCopy = effect.copy();
             playerEffects.add(effectCopy);
-            // Assuming StatusEffect has a public 'name' field or a public 'getName()' method
-            // If 'name' is a public field:
-            logLine("You are affected by " + effectCopy.getName() + ".");
-            // If 'name' is private and you have a public getName() method:
-            // logLine("You are affected by " + effectCopy.getName() + ".");
+            logLine("You are affected by " + effectCopy.getName() + "."); // Use getName()
         }
     }
 
@@ -388,11 +386,7 @@ public class CombatEngine {
         if (effect != null && s != null) {
             StatusEffect effectCopy = effect.copy();
             monsterEffects.add(effectCopy);
-            // Assuming StatusEffect has a public 'name' field or a public 'getName()' method
-            // If 'name' is a public field:
-            logLine(s.monsterName + " is affected by " + effectCopy.name + ".");
-            // If 'name' is private and you have a public getName() method:
-            // logLine(s.monsterName + " is affected by " + effectCopy.getName() + ".");
+            logLine(s.monsterName + " is affected by " + effectCopy.getName() + "."); // Use getName()
         }
     }
     public List<StatusEffect> getPlayerEffects() {
@@ -426,7 +420,8 @@ public class CombatEngine {
     public void onStun(boolean player, double durationSec) {
         BattleState s = state.getValue();
         if (s == null) return;
-        StatusEffect e = new StatusEffect("Stun", StatusEffect.Type.STUN, durationSec, 0); // Assuming a constructor
+        // Using the StatusEffect constructor that infers color
+        StatusEffect e = new StatusEffect("Stun", StatusEffect.Type.STUN, durationSec, 0);
         if (player) {
             playerEffects.add(e);
             logLine("You are stunned!");
@@ -446,19 +441,17 @@ public class CombatEngine {
     public void applyEffects() { // Renamed from updateEffects() to avoid conflict
         BattleState s = state.getValue();
         if (s != null) {
-            // Apply a very small delta to process one tick of effects if needed,
-            // or 0 if you just want to check expirations.
-            // Using 0 here means only expirations are handled unless tickAcc is already >= 1.0
-            updateEffects(playerEffects, true, 0.001, s); // Minimal delta to trigger one tick if ready
+            updateEffects(playerEffects, true, 0.001, s);
             updateEffects(monsterEffects, false, 0.001, s);
-            state.setValue(s); // Ensure UI updates if HPs changed
+            state.setValue(s);
         }
     }
 
     public void onSlow(boolean player, double durationSec, double amount) {
         BattleState s = state.getValue();
         if (s == null) return;
-        StatusEffect e = new StatusEffect("Slow", StatusEffect.Type.SLOW, durationSec, amount); // Assuming a constructor
+        // Using the StatusEffect constructor that infers color
+        StatusEffect e = new StatusEffect("Slow", StatusEffect.Type.SLOW, durationSec, amount);
         if (player) {
             playerEffects.add(e);
             logLine("You are slowed!");
@@ -468,10 +461,6 @@ public class CombatEngine {
         }
     }
 
-    // This was a duplicate of applyEffects essentially.
-    // public void updateEffects() { ... }
-
-
     private static double clamp01(double v) {
         if (v < 0) return 0;
         if (v > 1) return 1;
@@ -480,7 +469,6 @@ public class CombatEngine {
 
     // ----- tiny log helpers -----
     public void logClear() {
-        // Ensure this is called on the main thread if logLive is observed by UI
         if (Looper.myLooper() == Looper.getMainLooper()) {
             logLive.setValue(new ArrayList<>());
         } else {
@@ -489,12 +477,11 @@ public class CombatEngine {
     }
     private void logLine(String msg) {
         List<String> cur = logLive.getValue();
-        // Initialize if null, important if postValue is used and then getValue before main thread processes
         if (cur == null) cur = new ArrayList<>();
 
-        ArrayList<String> newList = new ArrayList<>(cur); // Create a new list for modification
+        ArrayList<String> newList = new ArrayList<>(cur);
         newList.add(0, msg);
-        if (newList.size() > 50) { // Trim if over limit
+        if (newList.size() > 50) {
             newList = new ArrayList<>(newList.subList(0, 50));
         }
 
@@ -504,6 +491,6 @@ public class CombatEngine {
             logLive.postValue(newList);
         }
 
-        if (debugToasts) repo.toast(msg); // Assuming repo.toast is thread-safe or posts to main
+        if (debugToasts) repo.toast(msg);
     }
 }
