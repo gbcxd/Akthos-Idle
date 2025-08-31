@@ -45,6 +45,25 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Level 1" />
+
+            <ProgressBar
+                android:id="@+id/pbXp"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="8dp"
+                android:layout_marginTop="4dp"
+                android:indeterminate="false"
+                android:max="100"
+                android:progress="0" />
+
+            <TextView
+                android:id="@+id/tvXp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textSize="12sp"
+                android:alpha="0.7"
+                android:text="0 / 0" />
         </LinearLayout>
 
         <ImageView
